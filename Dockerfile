@@ -11,11 +11,10 @@ WORKDIR /data/
 ADD douban-api-rs-$TARGETARCH$TARGETVARIANT /usr/bin/douban-api-rs
 
 # 生成启动脚本
-RUN echo '#!/bin/sh \n\n\
-\n\
-/usr/bin/douban-api-rs --port 80 -I ${PROXY_IMG}  \n\
-\n\
-' >> /entrypoint.sh
+RUN echo '#!/bin/sh
+
+/usr/bin/douban-api-rs --port 80 -I ${PROXY_IMG}
+' > /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/sbin/tini", "--"]
