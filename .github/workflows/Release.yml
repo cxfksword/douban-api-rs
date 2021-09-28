@@ -12,6 +12,8 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-musl
+          - x86_64-pc-windows-msvc
+          - x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -38,8 +40,8 @@ jobs:
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
-          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs
-          shasum -a 256 douban-api-rs-${{ matrix.target }}.tar.gz > douban-api-rs-${{ matrix.target }}.tar.gz.sha256
+          shasum -a 256 douban-api-rs > douban-api-rs.sha256
+          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
           cd -
       - name: Upload binary to GitHub Release
         uses: svenstaro/upload-release-action@v2
