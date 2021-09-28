@@ -1,20 +1,8 @@
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder, Result};
 mod api;
-mod params;
 use api::Douban;
-use params::Search;
+use serde::Deserialize;
 use structopt::StructOpt;
-
-#[derive(StructOpt, Debug)]
-#[structopt(name = "douban-api-rs")]
-struct Opt {
-    /// Listen host
-    #[structopt(long, default_value = "0.0.0.0")]
-    host: String,
-    /// Listen port
-    #[structopt(short, long, default_value = "8080")]
-    port: u16,
-}
 
 #[get("/")]
 async fn index() -> impl Responder {
@@ -41,10 +29,10 @@ async fn movies(query: web::Query<Search>) -> Result<String> {
 
     if query.search_type.as_ref().unwrap_or(&String::new()) == "full" {
         let result = Douban::new().search_full(&query.q).await.unwrap();
-        return Ok(serde_json::to_string(&result).unwrap());
+        Ok(serde_json::to_string(&result).unwrap())
     } else {
         let result = Douban::new().search(&query.q).await.unwrap();
-        return Ok(serde_json::to_string(&result).unwrap());
+        Ok(serde_json::to_string(&result).unwrap())
     }
 }
 
@@ -94,4 +82,22 @@ async fn main() -> std::io::Result<()> {
     .bind((opt.host, opt.port))?
     .run()
     .await
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "douban-api-rs")]
+struct Opt {
+    /// Listen host
+    #[structopt(long, default_value = "0.0.0.0")]
+    host: String,
+    /// Listen port
+    #[structopt(short, long, default_value = "8080")]
+    port: u16,
+}
+
+#[derive(Deserialize)]
+struct Search {
+    pub q: String,
+    #[serde(alias = "type")]
+    pub search_type: Option<String>,
 }

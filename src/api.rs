@@ -49,7 +49,7 @@ impl Douban {
         }
     }
 
-    pub async fn search(&self, q: &String) -> Result<Vec<Movie>> {
+    pub async fn search(&self, q: &str) -> Result<Vec<Movie>> {
         let mut vec = Vec::with_capacity(LIMIT);
         if q.is_empty() {
             return Ok(vec);
@@ -94,7 +94,7 @@ impl Douban {
                     });
 
                 for i in tmp {
-                    if i.cat == "电影" && i.rating != "" {
+                    if i.cat == "电影" {
                         vec.push(i)
                     }
                 }
@@ -107,7 +107,7 @@ impl Douban {
         Ok(vec)
     }
 
-    pub async fn search_full(&self, q: &String) -> Result<Vec<MovieInfo>> {
+    pub async fn search_full(&self, q: &str) -> Result<Vec<MovieInfo>> {
         let movies = self.search(q).await.unwrap();
         let mut list = Vec::with_capacity(movies.len());
         for i in movies[..3].iter() {
@@ -117,7 +117,7 @@ impl Douban {
         Ok(list)
     }
 
-    pub async fn get_movie_info(&self, sid: &String) -> Result<MovieInfo> {
+    pub async fn get_movie_info(&self, sid: &str) -> Result<MovieInfo> {
         let url = format!("https://movie.douban.com/subject/{}/", sid);
         let res = self
             .client
@@ -197,7 +197,7 @@ impl Douban {
         })
     }
 
-    pub async fn get_celebrity(&self, id: &String) -> Result<CelebrityInfo> {
+    pub async fn get_celebrity(&self, id: &str) -> Result<CelebrityInfo> {
         let url = format!("https://movie.douban.com/celebrity/{}/", id);
         let res = self
             .client
@@ -238,7 +238,7 @@ impl Douban {
         })
     }
 
-    pub async fn get_wallpaper(&self, sid: &String) -> Result<Vec<Photo>> {
+    pub async fn get_wallpaper(&self, sid: &str) -> Result<Vec<Photo>> {
         let url = format!("https://movie.douban.com/subject/{}/photos?type=W&start=0&sortby=size&size=a&subtype=a", sid);
         let res = self
             .client
