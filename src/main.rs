@@ -1,7 +1,8 @@
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder, Result};
+use actix_web::{get, middleware, web, App, HttpResponse, HttpServer, Responder, Result};
 mod api;
 use api::Douban;
 use serde::Deserialize;
+use std::env;
 use structopt::StructOpt;
 
 #[get("/")]
@@ -68,11 +69,13 @@ async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env::set_var("RUST_LOG", "actix_web=debug,actix_server=info");
+    env_logger::init();
     let opt = Opt::from_args();
 
-    println!("listening on {}:{:?}", opt.host, opt.port);
     HttpServer::new(|| {
         App::new()
+            .wrap(middleware::Logger::new("%a \"%r\" %s %b %T"))
             .app_data(web::Data::new(Douban::new()))
             .service(index)
             .service(movies)

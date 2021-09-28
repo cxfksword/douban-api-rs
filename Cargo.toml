@@ -19,6 +19,7 @@ visdom = "0.4.10"
 regex = "1.5.4"
 serde_json = "1.0"
 structopt = "0.3.22"
+env_logger = "0.8"
 
 [features]
 default = ["rustls-tls", "atomic64"]
