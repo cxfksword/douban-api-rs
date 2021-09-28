@@ -1,9 +1,9 @@
-use std::time::Duration;
-
 use anyhow::Result;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use urlencoding::encode;
 use visdom::Vis;
 
 const ORIGIN: &str = "https://movie.douban.com";
@@ -82,7 +82,7 @@ impl Douban {
         }
     }
 
-    pub async fn search(&self, q: &str, count: i32) -> Result<Vec<Movie>> {
+    pub async fn search(&self, q: &str, count: i32, proxy: &str) -> Result<Vec<Movie>> {
         let mut vec = Vec::with_capacity(LIMIT);
         if q.is_empty() {
             return Ok(vec);
@@ -113,7 +113,10 @@ impl Douban {
                         let x = Vis::dom(x);
                         let rating = x.find("div.rating-info>.rating_nums").text().to_string();
                         let onclick = x.find("div.title a").attr("onclick").unwrap().to_string();
-                        let img = x.find("a.nbg>img").attr("src").unwrap().to_string();
+                        let mut img = x.find("a.nbg>img").attr("src").unwrap().to_string();
+                        if !proxy.is_empty() {
+                            img = format!("{}?url={}", proxy, encode(&img));
+                        }
                         let sid = self.parse_sid(&onclick);
                         let name = x.find("div.title a").text().to_string();
                         let title_mark = x.find("div.title>h3>span").text().to_string();
@@ -143,7 +146,7 @@ impl Douban {
     }
 
     pub async fn search_full(&self, q: &str, count: i32) -> Result<Vec<MovieInfo>> {
-        let movies = self.search(q, count).await.unwrap();
+        let movies = self.search(q, count, "").await.unwrap();
         let mut list = Vec::with_capacity(movies.len());
         for i in movies.iter() {
             list.push(self.get_movie_info(&i.sid).await.unwrap())
@@ -312,6 +315,10 @@ impl Douban {
         });
 
         Ok(wallpapers)
+    }
+
+    pub async fn proxy_img(&self, url: &str) -> Result<reqwest::Response> {
+        Ok(self.client.get(url).send().await.unwrap())
     }
 
     fn parse_year(&self, text: String) -> String {

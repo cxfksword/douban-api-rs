@@ -23,7 +23,11 @@ async fn index() -> impl Responder {
 }
 
 #[get("/movies")]
-async fn movies(query: web::Query<Search>, douban_api: web::Data<Douban>) -> Result<String> {
+async fn movies(
+    query: web::Query<Search>,
+    douban_api: web::Data<Douban>,
+    opt: web::Data<Opt>,
+) -> Result<String> {
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
@@ -33,7 +37,10 @@ async fn movies(query: web::Query<Search>, douban_api: web::Data<Douban>) -> Res
         let result = douban_api.search_full(&query.q, count).await.unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     } else {
-        let result = douban_api.search(&query.q, count).await.unwrap();
+        let result = douban_api
+            .search(&query.q, count, &opt.proxy)
+            .await
+            .unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     }
 }
@@ -67,6 +74,15 @@ async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
     Ok(serde_json::to_string(&result).unwrap())
 }
 
+#[get("/proxy")]
+async fn proxy(query: web::Query<Proxy>, douban_api: web::Data<Douban>) -> impl Responder {
+    let resp = douban_api.proxy_img(&query.url).await.unwrap();
+    let content_type = resp.headers().get("content-type").unwrap();
+    HttpResponse::build(resp.status())
+        .append_header(("content-type", content_type))
+        .body(resp.bytes().await.unwrap())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug,actix_server=info");
@@ -77,12 +93,14 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(middleware::Logger::new("%a \"%r\" %s %b %T"))
             .app_data(web::Data::new(Douban::new()))
+            .app_data(web::Data::new(Opt::from_args()))
             .service(index)
             .service(movies)
             .service(movie)
             .service(celebrities)
             .service(celebrity)
             .service(photo)
+            .service(proxy)
     })
     .bind((opt.host, opt.port))?
     .run()
@@ -98,6 +116,8 @@ struct Opt {
     /// Listen port
     #[structopt(short, long, default_value = "8080")]
     port: u16,
+    #[structopt(short = "I", long, default_value = "")]
+    proxy: String,
 }
 
 #[derive(Deserialize)]
@@ -106,4 +126,9 @@ struct Search {
     #[serde(alias = "type")]
     pub search_type: Option<String>,
     pub count: Option<i32>,
+}
+
+#[derive(Deserialize)]
+struct Proxy {
+    pub url: String,
 }
