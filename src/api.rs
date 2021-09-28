@@ -1,0 +1,557 @@
+use std::time::Duration;
+
+use anyhow::Result;
+use regex::Regex;
+use reqwest::header::{HeaderMap, HeaderValue};
+use serde::{Deserialize, Serialize};
+use visdom::Vis;
+
+const ORIGIN: &str = "https://movie.douban.com";
+const REFERER: &str = "https://movie.douban.com/";
+const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
+const LIMIT: usize = 3;
+
+pub struct Douban {
+    client: reqwest::Client,
+    re_id: Regex,
+    re_backgroud_image: Regex,
+    re_sid: Regex,
+    re_cat: Regex,
+    re_year: Regex,
+}
+
+impl Douban {
+    pub fn new() -> Douban {
+        let mut headers = HeaderMap::new();
+        headers.insert("Origin", HeaderValue::from_static(ORIGIN));
+        headers.insert("Referer", HeaderValue::from_static(REFERER));
+        let client = reqwest::Client::builder()
+            .user_agent(UA)
+            .default_headers(headers)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap();
+
+        let re_id = Regex::new(r"/(\d+?)/").unwrap();
+        let re_backgroud_image = Regex::new(r"url\((.+?)\)").unwrap();
+        let re_sid = Regex::new(r"sid: (\d+?),").unwrap();
+        let re_cat = Regex::new(r"\[(.+?)\]").unwrap();
+        let re_year = Regex::new(r"\((\d+?)\)").unwrap();
+
+        return Self {
+            client,
+            re_id,
+            re_backgroud_image,
+            re_sid,
+            re_cat,
+            re_year,
+        };
+    }
+
+    pub async fn search(&self, q: &String) -> Result<Vec<Movie>> {
+        let mut vec = Vec::with_capacity(LIMIT);
+        if q.is_empty() {
+            return Ok(vec);
+        }
+
+        let url = "https://www.douban.com/search";
+        let res = self
+            .client
+            .get(url)
+            .query(&[("q", q)])
+            .send()
+            .await?
+            .error_for_status();
+
+        match res {
+            Ok(res) => {
+                let res = res.text().await?;
+                let document = Vis::load(&res).unwrap();
+                let tmp: Vec<Movie> = document
+                    .find("div.result-list")
+                    .first()
+                    .find(".result")
+                    .map(|_index, x| {
+                        let x = Vis::dom(x);
+                        let rating = x.find("div.rating-info>.rating_nums").text().to_string();
+                        let onclick = x.find("div.title a").attr("onclick").unwrap().to_string();
+                        let img = x.find("a.nbg>img").attr("src").unwrap().to_string();
+                        let sid = self.parse_sid(&onclick);
+                        let name = x.find("div.title a").text().to_string();
+                        let title_mark = x.find("div.title>h3>span").text().to_string();
+                        let cat = self.parse_cat(&title_mark);
+                        let subject = x.find("div.rating-info>.subject-cast").text().to_string();
+                        let year = self.parse_year(subject);
+                        Movie {
+                            cat,
+                            sid,
+                            name,
+                            rating,
+                            img,
+                            year,
+                        }
+                    });
+
+                for i in tmp {
+                    if i.cat == "电影" && i.rating != "" {
+                        vec.push(i)
+                    }
+                }
+            }
+            Err(err) => {
+                println!("{:?}", err)
+            }
+        }
+
+        Ok(vec)
+    }
+
+    pub async fn search_full(&self, q: &String) -> Result<Vec<MovieInfo>> {
+        let movies = self.search(q).await.unwrap();
+        let mut list = Vec::with_capacity(movies.len());
+        for i in movies[..3].iter() {
+            list.push(self.get_movie_info(&i.sid).await.unwrap())
+        }
+
+        return Ok(list);
+    }
+
+    pub async fn get_movie_info(&self, sid: &String) -> Result<MovieInfo> {
+        let url = format!("https://movie.douban.com/subject/{}/", sid);
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()
+            .unwrap();
+
+        let res = res.text().await?;
+        let document = Vis::load(&res).unwrap();
+        let x = document.find("#content");
+
+        let sid = sid.to_string();
+        let name = x.find("h1>span:first-child").text().to_string();
+        let year_str = x.find("h1>span.year").text().to_string();
+        let year = self.parse_year_for_detail(&year_str);
+
+        let rating = x
+            .find("div.rating_self strong.rating_num")
+            .text()
+            .to_string();
+        let img = x.find("a.nbgnbg>img").attr("src").unwrap().to_string();
+
+        let intro = x.find("div.indent>span").text().trim().to_string();
+        let info = x.find("#info").text().to_string();
+        let (
+            director,
+            writer,
+            actor,
+            genre,
+            site,
+            country,
+            language,
+            screen,
+            duration,
+            subname,
+            imdb,
+        ) = self.parse_info(&info);
+
+        let celebrities: Vec<Celebrity> = x.find("#celebrities li.celebrity").map(|_index, x| {
+            let x = Vis::dom(x);
+            let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
+            let id = self.parse_id(&id_str);
+            let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
+            let img = self.parse_backgroud_image(&img_str);
+            let name = x.find("div.info a.name").text().to_string();
+            let role = x.find("div.info span.role").text().to_string();
+
+            Celebrity {
+                id,
+                img,
+                name,
+                role,
+            }
+        });
+
+        Ok(MovieInfo {
+            sid,
+            name,
+            rating,
+            img,
+            year,
+            intro,
+            director,
+            writer,
+            actor,
+            genre,
+            site,
+            country,
+            language,
+            screen,
+            duration,
+            subname,
+            imdb,
+            celebrities,
+        })
+    }
+
+    pub async fn get_celebrity(&self, id: &String) -> Result<CelebrityInfo> {
+        let url = format!("https://movie.douban.com/celebrity/{}/", id);
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()
+            .unwrap();
+
+        let res = res.text().await?;
+        let document = Vis::load(&res).unwrap();
+        let x = document.find("#content");
+        let id = id.to_string();
+        let img = x.find("a.nbg>img").attr("src").unwrap().to_string();
+        let name = x.find("h1").text().to_string();
+        let mut intro = x.find("#intro span.short").text().trim().to_string();
+        if intro.is_empty() {
+            intro = x.find("#intro div.bd").text().trim().to_string();
+        }
+
+        let info = x.find("div.info").text().to_string();
+        let (gender, constellation, birthdate, birthplace, role, nickname, family, imdb) =
+            self.parse_celebrity_info(&info);
+
+        Ok(CelebrityInfo {
+            id,
+            img,
+            name,
+            role,
+            intro,
+            gender,
+            constellation,
+            birthdate,
+            birthplace,
+            nickname,
+            imdb,
+            family,
+        })
+    }
+
+    pub async fn get_wallpaper(&self, sid: &String) -> Result<Vec<Photo>> {
+        let url = format!("https://movie.douban.com/subject/{}/photos?type=W&start=0&sortby=size&size=a&subtype=a", sid);
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()
+            .unwrap();
+
+        let res = res.text().await?;
+        let document = Vis::load(&res).unwrap();
+        let wallpapers: Vec<Photo> = document.find(".poster-col3>li").map(|_index, x| {
+            let x = Vis::dom(x);
+
+            let id = x.attr("data-id").unwrap().to_string();
+            let small = format!("https://img1.doubanio.com/view/photo/s/public/p{}.jpg", id);
+            let medium = format!("https://img1.doubanio.com/view/photo/m/public/p{}.jpg", id);
+            let large = format!("https://img1.doubanio.com/view/photo/l/public/p{}.jpg", id);
+            let size = x.find("div.prop").text().trim().to_string();
+            let mut width = String::new();
+            let mut height = String::new();
+            if !size.is_empty() {
+                let arr: Vec<&str> = size.split('x').collect();
+                width = arr[0].to_string();
+                height = arr[1].to_string();
+            }
+            Photo {
+                id,
+                small,
+                medium,
+                large,
+                size,
+                width,
+                height,
+            }
+        });
+
+        Ok(wallpapers)
+    }
+
+    fn parse_year(&self, text: String) -> String {
+        text.split('/').last().unwrap().to_string()
+    }
+
+    fn parse_year_for_detail(&self, text: &String) -> String {
+        let mut year = String::new();
+        for cap in self.re_year.captures_iter(text) {
+            year = cap[1].to_string();
+        }
+
+        return year;
+    }
+
+    fn parse_sid(&self, text: &String) -> String {
+        let mut sid = String::new();
+        for cap in self.re_sid.captures_iter(text) {
+            sid = cap[1].to_string();
+        }
+
+        return sid;
+    }
+
+    fn parse_cat(&self, text: &String) -> String {
+        let mut sid = String::new();
+        for cap in self.re_cat.captures_iter(text) {
+            sid = cap[1].to_string();
+        }
+
+        return sid;
+    }
+
+    fn parse_id(&self, text: &String) -> String {
+        let mut id = String::new();
+        for cap in self.re_id.captures_iter(text) {
+            id = cap[1].to_string();
+        }
+
+        return id;
+    }
+
+    fn parse_backgroud_image(&self, text: &String) -> String {
+        let mut url = String::new();
+        for cap in self.re_backgroud_image.captures_iter(text) {
+            url = cap[1].to_string();
+        }
+
+        return url;
+    }
+
+    fn parse_info(
+        &self,
+        text: &String,
+    ) -> (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    ) {
+        // let re_info = Regex::new(r"(导演): (.+?)\n|(编剧): (.+?)\n|(主演): (.+?)\n|(类型): (.+?)\n|(制片国家\/地区): (.+?)\n|(语言): (.+?)\n|(上映日期): (.+?)\n|(片长): (.+?)\n|(又名): (.+?)\n|(IMDb): (.+?)\n").unwrap();
+        let re_director = Regex::new(r"(导演): (.+?)\n").unwrap();
+        let director = match re_director.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_writer = Regex::new(r"(编剧): (.+?)\n").unwrap();
+        let writer = match re_writer.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_actor = Regex::new(r"(主演): (.+?)\n").unwrap();
+        let actor = match re_actor.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_genre = Regex::new(r"(类型): (.+?)\n").unwrap();
+        let genre = match re_genre.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_country = Regex::new(r"(制片国家/地区): (.+?)\n").unwrap();
+        let country = match re_country.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_language = Regex::new(r"(语言): (.+?)\n").unwrap();
+        let language = match re_language.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+        let re_duration = Regex::new(r"(片长): (.+?)\n").unwrap();
+        let duration = match re_duration.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_screen = Regex::new(r"(上映日期): (.+?)\n").unwrap();
+        let screen = match re_screen.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_subname = Regex::new(r"(上映日期): (.+?)\n").unwrap();
+        let subname = match re_subname.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        let re_imdb = Regex::new(r"(IMDb): (.+?)\n").unwrap();
+        let imdb = match re_imdb.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+        let re_site = Regex::new(r"(官方网站): (.+?)\n").unwrap();
+        let site = match re_site.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+
+        return (
+            director, writer, actor, genre, site, country, language, screen, duration, subname,
+            imdb,
+        );
+    }
+
+    fn parse_celebrity_info(
+        &self,
+        text: &String,
+    ) -> (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    ) {
+        let re_gender = Regex::new(r"性别: \n(.+?)\n").unwrap();
+        let gender = match re_gender.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_constellation = Regex::new(r"星座: \n(.+?)\n").unwrap();
+        let constellation = match re_constellation.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_birthdate = Regex::new(r"出生日期: \n(.+?)\n").unwrap();
+        let birthdate = match re_birthdate.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_birthplace = Regex::new(r"出生地: \n(.+?)\n").unwrap();
+        let birthplace = match re_birthplace.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_role = Regex::new(r"职业: \n(.+?)\n").unwrap();
+        let role = match re_role.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_nickname = Regex::new(r"更多外文名: \n(.+?)\n").unwrap();
+        let nickname = match re_nickname.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_family = Regex::new(r"家庭成员: \n(.+?)\n").unwrap();
+        let family = match re_family.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        let re_imdb = Regex::new(r"imdb编号: \n(.+?)\n").unwrap();
+        let imdb = match re_imdb.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+
+        return (
+            gender,
+            constellation,
+            birthdate,
+            birthplace,
+            role,
+            nickname,
+            family,
+            imdb,
+        );
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Movie {
+    cat: String,
+    sid: String,
+    name: String,
+    rating: String,
+    img: String,
+    year: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MovieInfo {
+    sid: String,
+    name: String,
+    rating: String,
+    img: String,
+    year: String,
+    intro: String,
+    director: String,
+    writer: String,
+    actor: String,
+    genre: String,
+    site: String,
+    country: String,
+    language: String,
+    screen: String,
+    duration: String,
+    subname: String,
+    imdb: String,
+    pub celebrities: Vec<Celebrity>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Celebrity {
+    id: String,
+    img: String,
+    name: String,
+    role: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CelebrityInfo {
+    id: String,
+    img: String,
+    name: String,
+    role: String,
+    intro: String,
+    gender: String,
+    constellation: String,
+    birthdate: String,
+    birthplace: String,
+    nickname: String,
+    imdb: String,
+    family: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Photo {
+    id: String,
+    small: String,
+    medium: String,
+    large: String,
+    size: String,
+    width: String,
+    height: String,
+}
