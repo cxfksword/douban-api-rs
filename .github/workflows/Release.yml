@@ -11,7 +11,7 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-musl-bin
+          - aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
