@@ -10,5 +10,13 @@ RUN apk add tzdata && \
 WORKDIR /data/
 ADD douban-api-rs-$TARGETARCH$TARGETVARIANT /usr/bin/douban-api-rs
 
+# 生成启动脚本
+RUN cat '#!/bin/sh \n\n\
+\n\
+/usr/bin/douban-api-rs --port 80 -I ${PROXY_IMG}  \n\
+\n\
+' >> /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["/usr/bin/douban-api-rs", "--port", "80", "-I", "${PROXY_IMG}"]
+CMD ["/entrypoint.sh"]
