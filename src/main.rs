@@ -56,8 +56,8 @@ async fn movie(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
 #[get("/movies/{sid}/celebrities")]
 async fn celebrities(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
     let sid = path.into_inner();
-    let result = douban_api.get_movie_info(&sid).await.unwrap();
-    Ok(serde_json::to_string(&result.celebrities).unwrap())
+    let result = douban_api.get_celebrities(&sid).await.unwrap();
+    Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/celebrities/{id}")]

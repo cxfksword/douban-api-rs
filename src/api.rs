@@ -49,17 +49,17 @@ impl Douban {
         let re_sid = Regex::new(r"sid: (\d+?),").unwrap();
         let re_cat = Regex::new(r"\[(.+?)\]").unwrap();
         let re_year = Regex::new(r"\((\d+?)\)").unwrap();
-        let re_director = Regex::new(r"(导演): (.+?)\n").unwrap();
-        let re_writer = Regex::new(r"(编剧): (.+?)\n").unwrap();
-        let re_actor = Regex::new(r"(主演): (.+?)\n").unwrap();
-        let re_genre = Regex::new(r"(类型): (.+?)\n").unwrap();
-        let re_country = Regex::new(r"(制片国家/地区): (.+?)\n").unwrap();
-        let re_language = Regex::new(r"(语言): (.+?)\n").unwrap();
-        let re_duration = Regex::new(r"(片长): (.+?)\n").unwrap();
-        let re_screen = Regex::new(r"(上映日期): (.+?)\n").unwrap();
-        let re_subname = Regex::new(r"(上映日期): (.+?)\n").unwrap();
-        let re_imdb = Regex::new(r"(IMDb): (.+?)\n").unwrap();
-        let re_site = Regex::new(r"(官方网站): (.+?)\n").unwrap();
+        let re_director = Regex::new(r"导演: (.+?)\n").unwrap();
+        let re_writer = Regex::new(r"编剧: (.+?)\n").unwrap();
+        let re_actor = Regex::new(r"主演: (.+?)\n").unwrap();
+        let re_genre = Regex::new(r"类型: (.+?)\n").unwrap();
+        let re_country = Regex::new(r"制片国家/地区: (.+?)\n").unwrap();
+        let re_language = Regex::new(r"语言: (.+?)\n").unwrap();
+        let re_duration = Regex::new(r"片长: (.+?)\n").unwrap();
+        let re_screen = Regex::new(r"上映日期: (.+?)\n").unwrap();
+        let re_subname = Regex::new(r"又名: (.+?)\n").unwrap();
+        let re_imdb = Regex::new(r"IMDb: (.+?)\n").unwrap();
+        let re_site = Regex::new(r"官方网站: (.+?)\n").unwrap();
 
         Self {
             client,
@@ -180,7 +180,12 @@ impl Douban {
             .to_string();
         let img = x.find("a.nbgnbg>img").attr("src").unwrap().to_string();
 
-        let intro = x.find("div.indent>span").text().trim().to_string();
+        let intro = x
+            .find("div.indent>span")
+            .text()
+            .trim()
+            .replace("©豆瓣", "")
+            .to_string();
         let info = x.find("#info").text().to_string();
         let (
             director,
@@ -196,22 +201,25 @@ impl Douban {
             imdb,
         ) = self.parse_info(&info);
 
-        let celebrities: Vec<Celebrity> = x.find("#celebrities li.celebrity").map(|_index, x| {
-            let x = Vis::dom(x);
-            let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
-            let id = self.parse_id(&id_str);
-            let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
-            let img = self.parse_backgroud_image(&img_str);
-            let name = x.find("div.info a.name").text().to_string();
-            let role = x.find("div.info span.role").text().to_string();
+        let celebrities: Vec<Celebrity> =
+            x.find("#celebrities li.celebrity")
+                .first()
+                .map(|_index, x| {
+                    let x = Vis::dom(x);
+                    let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
+                    let id = self.parse_id(&id_str);
+                    let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
+                    let img = self.parse_backgroud_image(&img_str);
+                    let name = x.find("div.info a.name").text().to_string();
+                    let role = x.find("div.info span.role").text().to_string();
 
-            Celebrity {
-                id,
-                img,
-                name,
-                role,
-            }
-        });
+                    Celebrity {
+                        id,
+                        img,
+                        name,
+                        role,
+                    }
+                });
 
         Ok(MovieInfo {
             sid,
@@ -233,6 +241,58 @@ impl Douban {
             imdb,
             celebrities,
         })
+    }
+
+    pub async fn get_celebrities(&self, sid: &str) -> Result<Vec<Celebrity>> {
+        let url = format!("https://movie.douban.com/subject/{}/celebrities", sid);
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()
+            .unwrap();
+
+        let res = res.text().await?;
+        let document = Vis::load(&res).unwrap();
+        let x = document.find("#content");
+
+        let celebrities: Vec<Celebrity> = x
+            .find("ul.celebrities-list li.celebrity")
+            .map(|_index, x| {
+                let x = Vis::dom(x);
+                let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
+                let id = self.parse_id(&id_str);
+                let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
+                let img = self.parse_backgroud_image(&img_str);
+                let name = x
+                    .find("div.info a.name")
+                    .text()
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let role = x
+                    .find("div.info span.role")
+                    .text()
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+
+                Celebrity {
+                    id,
+                    img,
+                    name,
+                    role,
+                }
+            })
+            .into_iter()
+            .filter(|x| x.role == "导演" || x.role == "配音" || x.role == "演员")
+            .take(15)
+            .collect::<Vec<Celebrity>>();
+
+        Ok(celebrities)
     }
 
     pub async fn get_celebrity(&self, id: &str) -> Result<CelebrityInfo> {
