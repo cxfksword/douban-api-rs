@@ -67,12 +67,6 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
-      - name: Upload binary artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: ${{ matrix.target }}-bin
-          path: target/${{ matrix.target }}/release/douban-api-rs
-          if-no-files-found: error
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
@@ -106,17 +100,6 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
-      - name: Upx compress binary
-        uses: crazy-max/ghaction-upx@v1
-        with:
-          version: v3.95 # v3.96 breaks mipsel, https://github.com/upx/upx/issues/504
-          files: target/${{ matrix.target }}/release/douban-api-rs.exe
-      - name: Upload binary artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: ${{ matrix.target }}-bin
-          path: target/${{ matrix.target }}/release/douban-api-rs.exe
-          if-no-files-found: error
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
