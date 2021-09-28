@@ -18,6 +18,17 @@ pub struct Douban {
     re_sid: Regex,
     re_cat: Regex,
     re_year: Regex,
+    re_director: Regex,
+    re_writer: Regex,
+    re_actor: Regex,
+    re_genre: Regex,
+    re_country: Regex,
+    re_language: Regex,
+    re_duration: Regex,
+    re_screen: Regex,
+    re_subname: Regex,
+    re_imdb: Regex,
+    re_site: Regex,
 }
 
 impl Douban {
@@ -38,6 +49,17 @@ impl Douban {
         let re_sid = Regex::new(r"sid: (\d+?),").unwrap();
         let re_cat = Regex::new(r"\[(.+?)\]").unwrap();
         let re_year = Regex::new(r"\((\d+?)\)").unwrap();
+        let re_director = Regex::new(r"(导演): (.+?)\n").unwrap();
+        let re_writer = Regex::new(r"(编剧): (.+?)\n").unwrap();
+        let re_actor = Regex::new(r"(主演): (.+?)\n").unwrap();
+        let re_genre = Regex::new(r"(类型): (.+?)\n").unwrap();
+        let re_country = Regex::new(r"(制片国家/地区): (.+?)\n").unwrap();
+        let re_language = Regex::new(r"(语言): (.+?)\n").unwrap();
+        let re_duration = Regex::new(r"(片长): (.+?)\n").unwrap();
+        let re_screen = Regex::new(r"(上映日期): (.+?)\n").unwrap();
+        let re_subname = Regex::new(r"(上映日期): (.+?)\n").unwrap();
+        let re_imdb = Regex::new(r"(IMDb): (.+?)\n").unwrap();
+        let re_site = Regex::new(r"(官方网站): (.+?)\n").unwrap();
 
         Self {
             client,
@@ -46,13 +68,28 @@ impl Douban {
             re_sid,
             re_cat,
             re_year,
+            re_director,
+            re_writer,
+            re_actor,
+            re_genre,
+            re_country,
+            re_language,
+            re_duration,
+            re_screen,
+            re_subname,
+            re_imdb,
+            re_site,
         }
     }
 
-    pub async fn search(&self, q: &str) -> Result<Vec<Movie>> {
+    pub async fn search(&self, q: &str, count: i32) -> Result<Vec<Movie>> {
         let mut vec = Vec::with_capacity(LIMIT);
         if q.is_empty() {
             return Ok(vec);
+        }
+        let mut num = LIMIT;
+        if count > 0 {
+            num = count as usize;
         }
 
         let url = "https://www.douban.com/search";
@@ -68,7 +105,7 @@ impl Douban {
             Ok(res) => {
                 let res = res.text().await?;
                 let document = Vis::load(&res).unwrap();
-                let tmp: Vec<Movie> = document
+                vec = document
                     .find("div.result-list")
                     .first()
                     .find(".result")
@@ -91,13 +128,11 @@ impl Douban {
                             img,
                             year,
                         }
-                    });
-
-                for i in tmp {
-                    if i.cat == "电影" {
-                        vec.push(i)
-                    }
-                }
+                    })
+                    .into_iter()
+                    .filter(|x| x.cat == "电影")
+                    .take(num)
+                    .collect::<Vec<Movie>>();
             }
             Err(err) => {
                 println!("{:?}", err)
@@ -107,10 +142,10 @@ impl Douban {
         Ok(vec)
     }
 
-    pub async fn search_full(&self, q: &str) -> Result<Vec<MovieInfo>> {
-        let movies = self.search(q).await.unwrap();
+    pub async fn search_full(&self, q: &str, count: i32) -> Result<Vec<MovieInfo>> {
+        let movies = self.search(q, count).await.unwrap();
         let mut list = Vec::with_capacity(movies.len());
-        for i in movies[..3].iter() {
+        for i in movies.iter() {
             list.push(self.get_movie_info(&i.sid).await.unwrap())
         }
 
@@ -344,67 +379,56 @@ impl Douban {
         String,
         String,
     ) {
-        // let re_info = Regex::new(r"(导演): (.+?)\n|(编剧): (.+?)\n|(主演): (.+?)\n|(类型): (.+?)\n|(制片国家\/地区): (.+?)\n|(语言): (.+?)\n|(上映日期): (.+?)\n|(片长): (.+?)\n|(又名): (.+?)\n|(IMDb): (.+?)\n").unwrap();
-        let re_director = Regex::new(r"(导演): (.+?)\n").unwrap();
-        let director = match re_director.captures(text) {
+        let director = match self.re_director.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_writer = Regex::new(r"(编剧): (.+?)\n").unwrap();
-        let writer = match re_writer.captures(text) {
+        let writer = match self.re_writer.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_actor = Regex::new(r"(主演): (.+?)\n").unwrap();
-        let actor = match re_actor.captures(text) {
+        let actor = match self.re_actor.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_genre = Regex::new(r"(类型): (.+?)\n").unwrap();
-        let genre = match re_genre.captures(text) {
+        let genre = match self.re_genre.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_country = Regex::new(r"(制片国家/地区): (.+?)\n").unwrap();
-        let country = match re_country.captures(text) {
+        let country = match self.re_country.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_language = Regex::new(r"(语言): (.+?)\n").unwrap();
-        let language = match re_language.captures(text) {
-            Some(x) => x.get(1).unwrap().as_str().to_string(),
-            None => String::new(),
-        };
-        let re_duration = Regex::new(r"(片长): (.+?)\n").unwrap();
-        let duration = match re_duration.captures(text) {
+        let language = match self.re_language.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_screen = Regex::new(r"(上映日期): (.+?)\n").unwrap();
-        let screen = match re_screen.captures(text) {
+        let duration = match self.re_duration.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_subname = Regex::new(r"(上映日期): (.+?)\n").unwrap();
-        let subname = match re_subname.captures(text) {
+        let screen = match self.re_screen.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
 
-        let re_imdb = Regex::new(r"(IMDb): (.+?)\n").unwrap();
-        let imdb = match re_imdb.captures(text) {
+        let subname = match self.re_subname.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };
-        let re_site = Regex::new(r"(官方网站): (.+?)\n").unwrap();
-        let site = match re_site.captures(text) {
+
+        let imdb = match self.re_imdb.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().to_string(),
+            None => String::new(),
+        };
+        let site = match self.re_site.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().to_string(),
             None => String::new(),
         };

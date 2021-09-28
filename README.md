@@ -13,6 +13,12 @@
 /photo/{sid}                      # 获取电影壁纸
 ```
 
+## docker运行
+
+```
+docker run -d --name=douban-api-rs --restart=unless-stopped -p 8080:80 ghcr.io/cxfksword/douban-api-rs:latest
+```
+
 
 ## 返回结果示例
 

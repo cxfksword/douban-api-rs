@@ -22,46 +22,47 @@ async fn index() -> impl Responder {
 }
 
 #[get("/movies")]
-async fn movies(query: web::Query<Search>) -> Result<String> {
+async fn movies(query: web::Query<Search>, douban_api: web::Data<Douban>) -> Result<String> {
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
 
+    let count = query.count.unwrap_or(0);
     if query.search_type.as_ref().unwrap_or(&String::new()) == "full" {
-        let result = Douban::new().search_full(&query.q).await.unwrap();
+        let result = douban_api.search_full(&query.q, count).await.unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     } else {
-        let result = Douban::new().search(&query.q).await.unwrap();
+        let result = douban_api.search(&query.q, count).await.unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     }
 }
 
 /// {sid} - deserializes to a String
 #[get("/movies/{sid}")]
-async fn movie(path: web::Path<String>) -> Result<String> {
+async fn movie(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
     let sid = path.into_inner();
-    let result = Douban::new().get_movie_info(&sid).await.unwrap();
+    let result = douban_api.get_movie_info(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/movies/{sid}/celebrities")]
-async fn celebrities(path: web::Path<String>) -> Result<String> {
+async fn celebrities(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
     let sid = path.into_inner();
-    let result = Douban::new().get_movie_info(&sid).await.unwrap();
+    let result = douban_api.get_movie_info(&sid).await.unwrap();
     Ok(serde_json::to_string(&result.celebrities).unwrap())
 }
 
 #[get("/celebrities/{id}")]
-async fn celebrity(path: web::Path<String>) -> Result<String> {
+async fn celebrity(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
     let id = path.into_inner();
-    let result = Douban::new().get_celebrity(&id).await.unwrap();
+    let result = douban_api.get_celebrity(&id).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/photo/{sid}")]
-async fn photo(path: web::Path<String>) -> Result<String> {
+async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
     let sid = path.into_inner();
-    let result = Douban::new().get_wallpaper(&sid).await.unwrap();
+    let result = douban_api.get_wallpaper(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
@@ -72,6 +73,7 @@ async fn main() -> std::io::Result<()> {
     println!("listening on {}:{:?}", opt.host, opt.port);
     HttpServer::new(|| {
         App::new()
+            .app_data(web::Data::new(Douban::new()))
             .service(index)
             .service(movies)
             .service(movie)
@@ -100,4 +102,5 @@ struct Search {
     pub q: String,
     #[serde(alias = "type")]
     pub search_type: Option<String>,
+    pub count: Option<i32>,
 }
