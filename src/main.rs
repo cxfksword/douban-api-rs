@@ -53,28 +53,28 @@ async fn movies(query: web::Query<Search>) -> Result<String> {
 async fn movie(path: web::Path<String>) -> Result<String> {
     let sid = path.into_inner();
     let result = Douban::new().get_movie_info(&sid).await.unwrap();
-    return Ok(serde_json::to_string(&result).unwrap());
+    Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/movies/{sid}/celebrities")]
 async fn celebrities(path: web::Path<String>) -> Result<String> {
     let sid = path.into_inner();
     let result = Douban::new().get_movie_info(&sid).await.unwrap();
-    return Ok(serde_json::to_string(&result.celebrities).unwrap());
+    Ok(serde_json::to_string(&result.celebrities).unwrap())
 }
 
 #[get("/celebrities/{id}")]
 async fn celebrity(path: web::Path<String>) -> Result<String> {
     let id = path.into_inner();
     let result = Douban::new().get_celebrity(&id).await.unwrap();
-    return Ok(serde_json::to_string(&result).unwrap());
+    Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/photo/{sid}")]
 async fn photo(path: web::Path<String>) -> Result<String> {
     let sid = path.into_inner();
     let result = Douban::new().get_wallpaper(&sid).await.unwrap();
-    return Ok(serde_json::to_string(&result).unwrap());
+    Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[actix_web::main]

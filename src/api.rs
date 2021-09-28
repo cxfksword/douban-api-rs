@@ -39,14 +39,14 @@ impl Douban {
         let re_cat = Regex::new(r"\[(.+?)\]").unwrap();
         let re_year = Regex::new(r"\((\d+?)\)").unwrap();
 
-        return Self {
+        Self {
             client,
             re_id,
             re_backgroud_image,
             re_sid,
             re_cat,
             re_year,
-        };
+        }
     }
 
     pub async fn search(&self, q: &String) -> Result<Vec<Movie>> {
@@ -114,7 +114,7 @@ impl Douban {
             list.push(self.get_movie_info(&i.sid).await.unwrap())
         }
 
-        return Ok(list);
+        Ok(list)
     }
 
     pub async fn get_movie_info(&self, sid: &String) -> Result<MovieInfo> {
@@ -283,54 +283,54 @@ impl Douban {
         text.split('/').last().unwrap().to_string()
     }
 
-    fn parse_year_for_detail(&self, text: &String) -> String {
+    fn parse_year_for_detail(&self, text: &str) -> String {
         let mut year = String::new();
         for cap in self.re_year.captures_iter(text) {
             year = cap[1].to_string();
         }
 
-        return year;
+        year
     }
 
-    fn parse_sid(&self, text: &String) -> String {
+    fn parse_sid(&self, text: &str) -> String {
         let mut sid = String::new();
         for cap in self.re_sid.captures_iter(text) {
             sid = cap[1].to_string();
         }
 
-        return sid;
+        sid
     }
 
-    fn parse_cat(&self, text: &String) -> String {
+    fn parse_cat(&self, text: &str) -> String {
         let mut sid = String::new();
         for cap in self.re_cat.captures_iter(text) {
             sid = cap[1].to_string();
         }
 
-        return sid;
+        sid
     }
 
-    fn parse_id(&self, text: &String) -> String {
+    fn parse_id(&self, text: &str) -> String {
         let mut id = String::new();
         for cap in self.re_id.captures_iter(text) {
             id = cap[1].to_string();
         }
 
-        return id;
+        id
     }
 
-    fn parse_backgroud_image(&self, text: &String) -> String {
+    fn parse_backgroud_image(&self, text: &str) -> String {
         let mut url = String::new();
         for cap in self.re_backgroud_image.captures_iter(text) {
             url = cap[1].to_string();
         }
 
-        return url;
+        url
     }
 
     fn parse_info(
         &self,
-        text: &String,
+        text: &str,
     ) -> (
         String,
         String,
@@ -409,15 +409,15 @@ impl Douban {
             None => String::new(),
         };
 
-        return (
+        (
             director, writer, actor, genre, site, country, language, screen, duration, subname,
             imdb,
-        );
+        )
     }
 
     fn parse_celebrity_info(
         &self,
-        text: &String,
+        text: &str,
     ) -> (
         String,
         String,
@@ -476,7 +476,7 @@ impl Douban {
             None => String::new(),
         };
 
-        return (
+        (
             gender,
             constellation,
             birthdate,
@@ -485,7 +485,7 @@ impl Douban {
             nickname,
             family,
             imdb,
-        );
+        )
     }
 }
 
