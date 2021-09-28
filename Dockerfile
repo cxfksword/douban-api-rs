@@ -1,7 +1,6 @@
 FROM alpine:latest
 ARG TARGETARCH
 ARG TARGETVARIANT
-ENV PROXY_IMG
 RUN apk --no-cache add ca-certificates tini
 RUN apk add tzdata && \
 	cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
