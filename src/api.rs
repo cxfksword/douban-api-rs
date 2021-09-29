@@ -1,4 +1,6 @@
 use anyhow::Result;
+use lazy_static::*;
+use moka::future::{Cache, CacheBuilder};
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -6,11 +8,19 @@ use std::time::Duration;
 use urlencoding::encode;
 use visdom::Vis;
 
+lazy_static! {
+    static ref MOVIE_CACHE: Cache<String, MovieInfo> = CacheBuilder::new(CACHE_SIZE)
+        .time_to_live(Duration::from_secs(10 * 60))
+        .build();
+}
+
 const ORIGIN: &str = "https://movie.douban.com";
 const REFERER: &str = "https://movie.douban.com/";
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
 const LIMIT: usize = 3;
+const CACHE_SIZE: usize = 100;
 
+#[derive(Clone)]
 pub struct Douban {
     client: reqwest::Client,
     re_id: Regex,
@@ -43,7 +53,6 @@ impl Douban {
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
-
         let re_id = Regex::new(r"/(\d+?)/").unwrap();
         let re_backgroud_image = Regex::new(r"url\((.+?)\)").unwrap();
         let re_sid = Regex::new(r"sid: (\d+?),").unwrap();
@@ -156,6 +165,10 @@ impl Douban {
     }
 
     pub async fn get_movie_info(&self, sid: &str) -> Result<MovieInfo> {
+        let cache_key = sid.to_string();
+        if MOVIE_CACHE.get(&cache_key).is_some() {
+            return Ok(MOVIE_CACHE.get(&cache_key).unwrap());
+        }
         let url = format!("https://movie.douban.com/subject/{}/", sid);
         let res = self
             .client
@@ -221,7 +234,7 @@ impl Douban {
                     }
                 });
 
-        Ok(MovieInfo {
+        let info = MovieInfo {
             sid,
             name,
             rating,
@@ -240,7 +253,10 @@ impl Douban {
             subname,
             imdb,
             celebrities,
-        })
+        };
+        MOVIE_CACHE.insert(cache_key, info.clone()).await;
+
+        Ok(info)
     }
 
     pub async fn get_celebrities(&self, sid: &str) -> Result<Vec<Celebrity>> {
@@ -580,7 +596,7 @@ impl Douban {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Movie {
     cat: String,
     sid: String,
@@ -590,7 +606,7 @@ pub struct Movie {
     year: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovieInfo {
     sid: String,
     name: String,
@@ -612,7 +628,7 @@ pub struct MovieInfo {
     pub celebrities: Vec<Celebrity>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Celebrity {
     id: String,
     img: String,
@@ -620,7 +636,7 @@ pub struct Celebrity {
     role: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CelebrityInfo {
     id: String,
     img: String,
@@ -636,7 +652,7 @@ pub struct CelebrityInfo {
     family: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Photo {
     id: String,
     small: String,
