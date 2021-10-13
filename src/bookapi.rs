@@ -8,11 +8,18 @@ use std::time::Duration;
 use urlencoding::encode;
 use visdom::Vis;
 
+lazy_static! {
+  static ref BOOK_CACHE: Cache<String, DoubanBook> = CacheBuilder::new(CACHE_SIZE)
+      .time_to_live(Duration::from_secs(10 * 60))
+      .build();
+}
+
 
 const ORIGIN: &str = "https://book.douban.com";
 const REFERER: &str = "https://book.douban.com/";
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
 const LIMIT: usize = 3;
+const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct DoubanBookApi {
@@ -44,7 +51,7 @@ impl DoubanBookApi {
       .build()
       .unwrap();
     let re_id = Regex::new(r"sid: (\d+?),").unwrap();
-    let re_author = Regex::new(r"作者: (.+?)\n").unwrap();
+    let re_author = Regex::new(r"作者: \n\n(.+?)\n").unwrap();
     let re_binding = Regex::new(r"装帧: (.+?)\n").unwrap();
     let re_category = Regex::new(r"分类: (.+?)\n").unwrap();
     let re_isbn = Regex::new(r"ISBN: (.+?)\n").unwrap();
@@ -85,8 +92,6 @@ impl DoubanBookApi {
 
   async fn get_ids(&self, q: &str, count: i32) -> Result<Vec<String>> {
     let mut vec = Vec::with_capacity(LIMIT);
-    println!("q:{}", q);
-    println!("q is empty:{}", q.is_empty());
     if q.is_empty() {
       return Ok(vec);
     }
@@ -95,21 +100,20 @@ impl DoubanBookApi {
       num = count as usize;
     }
     
-    let url = format!("https://www.douban.com/search?cat=100&q={}",q);
+    let url = format!("https://www.douban.com/search");
     let res = self
       .client
       .get(url)
+      .query(&[("q", q), ("cat", "1001")])
       .send()
       .await?
       .error_for_status();
-    println!("html: {}", res?.text().await?);
     match res {
       Ok(res) => {
         let res = res.text().await?;
-        println!("结果: {}", res);
         let document = Vis::load(&res).unwrap();
         vec = document
-          .filter("div.result-list")
+          .find("div.result-list")
           .first()
           .find(".result")
           .map(|_index, x| {
@@ -123,7 +127,7 @@ impl DoubanBookApi {
           .collect::<Vec<String>>();
       }
       Err(err) => {
-        print!("error: {:?}", err)
+        println!("错误: {:?}", err);
       }
     }
 
@@ -148,16 +152,22 @@ impl DoubanBookApi {
     let large_img = x.find("a.nbg").attr("href").unwrap().to_string();
     let small_img = x.find("a.nbg>img").attr("src").unwrap().to_string();
     let content = x.find("#content");
-    let rating = content.find("div.rating_self strong.rating_num").text().to_string();
+    let rating = content.find("div.rating_self strong.rating_num").text().trim().to_string();
     let summary = content
       .find("div.intro>span")
       .text()
       .trim()
       .replace("©豆瓣", "")
       .to_string();
-    let info = content.find("#info").text().to_string();
+    let info = content.find("#info");
+    info.find("span.pl")
+        .map(|_index, x| {
+            println!("{}", x.text().to_string());
+            println!("{}", x.next.text().to_string());
+        });
     let category = String::from("");//TODO 页面上是在找不到分类...
-    let (author, publisher, producer, pubdate, pages, price, binding, serials, subtitle, isbn, ) = self.parse_info(&info);
+    let infoText = info.text().to_string();
+    let (author, publisher, producer, pubdate, pages, price, binding, serials, subtitle, isbn, ) = self.parse_info(&infoText);
     let images = Image {
       medium: "".to_string(),
       large: large_img,
@@ -213,7 +223,7 @@ impl DoubanBookApi {
       Some(x) => x.get(1).unwrap().as_str().to_string(),
       None => String::new(),
     };
-    let producer = match self.re_publisher.captures(text) {
+    let producer = match self.re_producer.captures(text) {
       Some(x) => x.get(1).unwrap().as_str().to_string(),
       None => String::new(),
     };
