@@ -17,12 +17,13 @@ lazy_static! {
 const ORIGIN: &str = "https://movie.douban.com";
 const REFERER: &str = "https://movie.douban.com/";
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
-const LIMIT: usize = 3;
+const DEFAULT_LIMIT: usize = 3;
 const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct Douban {
     client: reqwest::Client,
+    search_limit_size: usize,
     re_id: Regex,
     re_backgroud_image: Regex,
     re_sid: Regex,
@@ -42,7 +43,7 @@ pub struct Douban {
 }
 
 impl Douban {
-    pub fn new() -> Douban {
+    pub fn new(limit_size: usize) -> Douban {
         let mut headers = HeaderMap::new();
         headers.insert("Origin", HeaderValue::from_static(ORIGIN));
         headers.insert("Referer", HeaderValue::from_static(REFERER));
@@ -53,6 +54,12 @@ impl Douban {
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
+        let search_limit_size = if limit_size == 0 {
+            DEFAULT_LIMIT
+        } else {
+            limit_size
+        };
+
         let re_id = Regex::new(r"/(\d+?)/").unwrap();
         let re_backgroud_image = Regex::new(r"url\((.+?)\)").unwrap();
         let re_sid = Regex::new(r"sid: (\d+?),").unwrap();
@@ -72,6 +79,7 @@ impl Douban {
 
         Self {
             client,
+            search_limit_size,
             re_id,
             re_backgroud_image,
             re_sid,
@@ -92,11 +100,11 @@ impl Douban {
     }
 
     pub async fn search(&self, q: &str, count: i32, proxy: &str) -> Result<Vec<Movie>> {
-        let mut vec = Vec::with_capacity(LIMIT);
+        let mut vec = Vec::with_capacity(self.search_limit_size);
         if q.is_empty() {
             return Ok(vec);
         }
-        let mut num = LIMIT;
+        let mut num = self.search_limit_size;
         if count > 0 {
             num = count as usize;
         }
@@ -398,7 +406,7 @@ impl Douban {
     }
 
     fn parse_year(&self, text: String) -> String {
-        text.split('/').last().unwrap().to_string()
+        text.split('/').last().unwrap().trim().to_string()
     }
 
     fn parse_year_for_detail(&self, text: &str) -> String {

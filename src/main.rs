@@ -88,11 +88,12 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=debug,actix_server=info");
     env_logger::init();
     let opt = Opt::from_args();
+    let douban = Douban::new(opt.limit);
 
-    HttpServer::new(|| {
+    HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::new("%a \"%r\" %s %b %T"))
-            .app_data(web::Data::new(Douban::new()))
+            .app_data(web::Data::new(douban.clone()))
             .app_data(web::Data::new(Opt::from_args()))
             .service(index)
             .service(movies)
@@ -118,6 +119,8 @@ struct Opt {
     port: u16,
     #[structopt(short = "I", long, default_value = "")]
     proxy: String,
+    #[structopt(long, default_value = "3")]
+    limit: usize,
 }
 
 #[derive(Deserialize)]

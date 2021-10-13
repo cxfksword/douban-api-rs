@@ -13,7 +13,7 @@ ADD douban-api-rs-$TARGETARCH$TARGETVARIANT /usr/bin/douban-api-rs
 # 生成启动脚本
 RUN printf '#!/bin/sh \n\n\
 \n\
-/usr/bin/douban-api-rs --port 80 -I ${PROXY_IMG}  \n\
+/usr/bin/douban-api-rs --port 80 -I ${PROXY_IMG} --limit ${LIMIT_SIZE}  \n\
 \n\
 ' > /entrypoint.sh
 RUN chmod +x /entrypoint.sh
