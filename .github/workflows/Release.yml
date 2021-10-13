@@ -39,6 +39,7 @@ jobs:
         run: |
           cd target/${{ matrix.target }}/release
           shasum -a 256 douban-api-rs > douban-api-rs.sha256
+          chmod +x douban-api-rs
           tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
           cd -
       - name: Upload binary to GitHub Release
@@ -51,70 +52,71 @@ jobs:
           overwrite: true
           tag: ${{ github.ref }}
 
-  # macos:
-  #   runs-on: macos-latest
-  #   strategy:
-  #     matrix:
-  #       target:
-  #         - x86_64-apple-darwin
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         target: ${{ matrix.target }}
-  #         override: true
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: --release --target=${{ matrix.target }}
-  #     - name: Archive binary
-  #       run: |
-  #         cd target/${{ matrix.target }}/release
-  #         shasum -a 256 douban-api-rs > douban-api-rs.sha256
-  #         tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
-  #         cd -
-  #     - name: Upload binary to GitHub Release
-  #       uses: svenstaro/upload-release-action@v2
-  #       if: "startsWith(github.ref, 'refs/tags/')"
-  #       with:
-  #         repo_token: ${{ secrets.GITHUB_TOKEN }}
-  #         file: target/${{ matrix.target }}/release/douban-api-rs*.tar.gz*
-  #         file_glob: true
-  #         overwrite: true
-  #         tag: ${{ github.ref }}
+  macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target=${{ matrix.target }}
+      - name: Archive binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          shasum -a 256 douban-api-rs > douban-api-rs.sha256
+          chmod +x douban-api-rs
+          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
+          cd -
+      - name: Upload binary to GitHub Release
+        uses: svenstaro/upload-release-action@v2
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/douban-api-rs-${{ matrix.target }}.tar.gz
+          file_glob: true
+          overwrite: true
+          tag: ${{ github.ref }}
 
-  # windows:
-  #   runs-on: windows-latest
-  #   strategy:
-  #     matrix:
-  #       target:
-  #         - x86_64-pc-windows-msvc
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         target: ${{ matrix.target }}
-  #         override: true
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: --release --target=${{ matrix.target }}
-  #     - name: Archive binary
-  #       run: |
-  #         cd target/${{ matrix.target }}/release
-  #         7z a  douban-api-rs-${{ matrix.target }}.zip douban-api-rs.exe
-  #         cd -
-  #     - name: Upload binary to GitHub Release
-  #       uses: svenstaro/upload-release-action@v2
-  #       if: "startsWith(github.ref, 'refs/tags/')"
-  #       with:
-  #         repo_token: ${{ secrets.GITHUB_TOKEN }}
-  #         file: target/${{ matrix.target }}/release/douban-api-rs-${{ matrix.target }}.zip
-  #         file_glob: true
-  #         overwrite: true
-  #         tag: ${{ github.ref }}
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target=${{ matrix.target }}
+      - name: Archive binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          makecab douban-api-rs.exe douban-api-rs-${{ matrix.target }}.zip 
+          cd -
+      - name: Upload binary to GitHub Release
+        uses: svenstaro/upload-release-action@v2
+        if: "startsWith(github.ref, 'refs/tags/')"
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/douban-api-rs-${{ matrix.target }}.zip
+          file_glob: true
+          overwrite: true
+          tag: ${{ github.ref }}
 
   docker:
     name: Build Docker Image

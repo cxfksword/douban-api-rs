@@ -40,7 +40,7 @@ docker run -d --name=douban-api-rs --restart=unless-stopped -p 8080:80 ghcr.io/c
         "name": "乘风破浪的姐姐 第一季 ",
         "rating": "6.8",
         "img": "https://img1.doubanio.com/view/photo/s_ratio_poster/public/p2608297477.jpg",
-        "year": " 2020"
+        "year": "2020"
     }
 ]
 ```
