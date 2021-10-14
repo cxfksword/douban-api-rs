@@ -21,9 +21,16 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
+      - name: Archive binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          shasum -a 256 douban-api-rs > douban-api-rs.sha256
+          chmod +x douban-api-rs
+          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
+          cd -
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}-bin
-          path: target/${{ matrix.target }}/release/douban-api-rs
+          path: target/${{ matrix.target }}/release/douban-api-rs-${{ matrix.target }}.tar.gz
           if-no-files-found: error
