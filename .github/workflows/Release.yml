@@ -24,7 +24,7 @@ jobs:
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
-          zip -r douban-api-rs  -o douban-api-rs-${{ matrix.target }}.zip
+          sudo /usr/sbin/purge  # fix tar bug: https://github.com/actions/virtual-environments/issues/2619
           tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs
           cd -
       - name: Upload binary artifacts
