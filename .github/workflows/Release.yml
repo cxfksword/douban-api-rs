@@ -24,12 +24,11 @@ jobs:
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
-          sudo /usr/sbin/purge  # fix tar bug: https://github.com/actions/virtual-environments/issues/2619
-          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs
+          gtar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs
           cd -
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}-bin
-          path: target/${{ matrix.target }}/release/douban-api-*
+          path: target/${{ matrix.target }}/release/douban-api-rs-${{ matrix.target }}.tar.gz
           if-no-files-found: error
