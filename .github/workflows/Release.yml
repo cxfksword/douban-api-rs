@@ -24,11 +24,12 @@ jobs:
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
+          zip -r douban-api-rs  -o douban-api-rs-${{ matrix.target }}.zip
           tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs
           cd -
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}-bin
-          path: target/${{ matrix.target }}/release/douban-api-rs-${{ matrix.target }}.tar.gz
+          path: target/${{ matrix.target }}/release/douban-api-*
           if-no-files-found: error
