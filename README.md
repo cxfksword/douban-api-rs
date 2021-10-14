@@ -11,6 +11,8 @@
 /movies/{sid}/celebrities         # 获取演员列表
 /celebrities/{cid}                # 获取演员信息
 /photo/{sid}                      # 获取电影壁纸
+/book?q={book_name}               # 搜索书籍
+/book/{sid}                       # 获取指定书籍
 ```
 
 ## docker运行
