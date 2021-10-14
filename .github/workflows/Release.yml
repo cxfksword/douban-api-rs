@@ -24,8 +24,7 @@ jobs:
       - name: Archive binary
         run: |
           cd target/${{ matrix.target }}/release
-          shasum -a 256 douban-api-rs > douban-api-rs.sha256
-          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
+          tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs
           cd -
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v2
