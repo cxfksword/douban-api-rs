@@ -25,7 +25,6 @@ jobs:
         run: |
           cd target/${{ matrix.target }}/release
           shasum -a 256 douban-api-rs > douban-api-rs.sha256
-          chmod +x douban-api-rs
           tar czvf douban-api-rs-${{ matrix.target }}.tar.gz douban-api-rs douban-api-rs.sha256
           cd -
       - name: Upload binary artifacts
