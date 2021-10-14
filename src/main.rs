@@ -1,6 +1,8 @@
 use actix_web::{get, middleware, web, App, HttpResponse, HttpServer, Responder, Result};
 mod api;
+mod bookapi;
 use api::Douban;
+use bookapi::DoubanBookApi;
 use serde::Deserialize;
 use std::env;
 use structopt::StructOpt;
@@ -18,6 +20,8 @@ async fn index() -> impl Responder {
        /movies/{sid}/celebrities<br/>
        /celebrities/{cid}<br/>
        /photo/{sid}<br/>
+       /book?q={book_name}<br/>
+       /book/{sid}<br/>
     "#,
         )
 }
@@ -74,6 +78,28 @@ async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
     Ok(serde_json::to_string(&result).unwrap())
 }
 
+#[get("/book")]
+async fn books(
+    query: web::Query<Search>,
+    book_api: web::Data<DoubanBookApi>
+) -> Result<String> {
+    if query.q.is_empty() {
+        return Ok("[]".to_string());
+    }
+    let count = query.count.unwrap_or(2);
+    let result = book_api.search(&query.q, count).await.unwrap();
+    Ok(serde_json::to_string(&result).unwrap())
+}
+
+#[get("/book/{sid}")]
+async fn book(path: web::Path<String>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
+    let sid = path.into_inner();
+    match book_api.get_book_info(&sid).await {
+        Ok(info) => Ok(serde_json::to_string(&info).unwrap()),
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+    }
+}
+
 #[get("/proxy")]
 async fn proxy(query: web::Query<Proxy>, douban_api: web::Data<Douban>) -> impl Responder {
     let resp = douban_api.proxy_img(&query.url).await.unwrap();
@@ -94,6 +120,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(middleware::Logger::new("%a \"%r\" %s %b %T"))
             .app_data(web::Data::new(douban.clone()))
+            .app_data(web::Data::new(DoubanBookApi::new()))
             .app_data(web::Data::new(Opt::from_args()))
             .service(index)
             .service(movies)
@@ -101,6 +128,8 @@ async fn main() -> std::io::Result<()> {
             .service(celebrities)
             .service(celebrity)
             .service(photo)
+            .service(book)
+            .service(books)
             .service(proxy)
     })
     .bind((opt.host, opt.port))?
