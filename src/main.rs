@@ -86,7 +86,7 @@ async fn books(
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
-    let count = query.count.unwrap_or(3);
+    let count = query.count.unwrap_or(2);
     let result = book_api.search(&query.q, count).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
@@ -94,8 +94,10 @@ async fn books(
 #[get("/book/{sid}")]
 async fn book(path: web::Path<String>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
     let sid = path.into_inner();
-    let result = book_api.get_book_info(&sid).await.unwrap();
-    Ok(serde_json::to_string(&result).unwrap())
+    match book_api.get_book_info(&sid).await {
+        Ok(info) => Ok(serde_json::to_string(&info).unwrap()),
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+    }
 }
 
 #[get("/proxy")]
@@ -129,9 +131,9 @@ async fn main() -> std::io::Result<()> {
             .service(books)
             .service(proxy)
     })
-    .bind((opt.host, opt.port))?
-    .run()
-    .await
+        .bind((opt.host, opt.port))?
+        .run()
+        .await
 }
 
 #[derive(StructOpt, Debug)]
