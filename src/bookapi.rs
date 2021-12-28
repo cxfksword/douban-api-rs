@@ -176,10 +176,11 @@ impl DoubanBookApi {
             .replace("©豆瓣", "")
             .to_string();
         let author_intro = content
-            .find("div.related_info .indent .intro")
+            .find("div.related_info .short .intro")
             .text()
             .trim()
             .to_string();
+
         let info = content.find("#info");
         let mut author = Vec::with_capacity(1);
         let mut translators = Vec::with_capacity(1);
@@ -187,8 +188,8 @@ impl DoubanBookApi {
         let mut serials = String::new();
         info.find("span.pl").map(|_index, x| {
             match x.text().trim().to_string().as_str() {
-                "作者" => self.get_texts(x, &mut author),
-                "译者" => self.get_texts(x, &mut translators),
+                "作者:" => self.get_texts(x, &mut author),
+                "译者:" => self.get_texts(x, &mut translators),
                 "出品方:" => producer = self.get_text(x),
                 "丛书:" => serials = self.get_text(x),
                 _ => {}
@@ -252,7 +253,16 @@ impl DoubanBookApi {
 
     fn get_texts(&self, e: &BoxDynElement, vec: &mut Vec<String>) {
         for e in e.next_element_siblings() {
-            vec.push(e.text().to_string());
+            let t = e
+                .text()
+                .trim()
+                .replace('\n', "")
+                .replace(' ', "")
+                .to_string();
+            if t == "" {
+                break;
+            }
+            vec.push(t);
         }
     }
 
