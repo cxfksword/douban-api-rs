@@ -11,7 +11,7 @@
 /movies/{sid}/celebrities         # 获取演员列表
 /celebrities/{cid}                # 获取演员信息
 /photo/{sid}                      # 获取电影壁纸
-/v2/book/search?q={book_name}     # 搜索书籍
+/v2/book/search/?q={book_name}     # 搜索书籍
 /v2/book/isbn/{isbn}              # 获取指定isbn的书籍
 /v2/book/{sid}                    # 获取指定id的书籍
 ```

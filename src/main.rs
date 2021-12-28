@@ -79,7 +79,7 @@ async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
     Ok(serde_json::to_string(&result).unwrap())
 }
 
-#[get("/v2/book/search")]
+#[get("/v2/book/search/")]
 async fn books(query: web::Query<Search>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
     if query.q.is_empty() {
         return Ok("[]".to_string());
