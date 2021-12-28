@@ -139,9 +139,9 @@ impl DoubanBookApi {
             Ok(t) => {
                 let t_url = t.url().as_str();
                 let t_array = t_url.split('/').collect::<Vec<&str>>();
-                id=t_array[t_array.len()-2].to_string();
+                id = t_array[t_array.len() - 2].to_string();
                 result_text = (t.text().await?).clone()
-            },
+            }
         }
 
         let document = Vis::load(&result_text).unwrap();
