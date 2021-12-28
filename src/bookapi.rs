@@ -127,12 +127,7 @@ impl DoubanBookApi {
         Ok(vec)
     }
 
-    pub async fn get_book_info(&self, id: &str) -> Result<DoubanBook> {
-        let cache_key = id.to_string();
-        if BOOK_CACHE.get(&cache_key).is_some() {
-            return Ok(BOOK_CACHE.get(&cache_key).unwrap());
-        }
-        let url = format!("https://book.douban.com/subject/{}/", id);
+    async fn get_book_internal(&self, url: String) -> Result<DoubanBook> {
         let res = self.client.get(url).send().await?.error_for_status();
         let result_text: String;
         match res {
@@ -143,10 +138,12 @@ impl DoubanBookApi {
             Ok(t) => result_text = (t.text().await?).clone(),
         }
 
-        // let res = res.unwrap().text().await?;
         let document = Vis::load(&result_text).unwrap();
         let x = document.find("#wrapper");
-        let id = id.to_string();
+        let id = document
+            .find("//meta[@property='og:url']/content[0]")
+            .text()
+            .to_string();
         let title = x.find("h1>span:first-child").text().to_string();
         let large_img = x.find("a.nbg").attr("href").unwrap().to_string();
         let small_img = x.find("a.nbg>img").attr("src").unwrap().to_string();
@@ -205,6 +202,7 @@ impl DoubanBookApi {
             large: large_img,
             small: small_img,
         };
+        let cache_key = id.clone();
         let info = DoubanBook {
             id,
             author,
@@ -228,6 +226,19 @@ impl DoubanBookApi {
         };
         BOOK_CACHE.insert(cache_key, info.clone()).await;
         Ok(info)
+    }
+
+    pub async fn get_book_info_by_isbn(&self, isbn: &str) -> Result<DoubanBook> {
+        let url = format!("https://douban.com/isbn/{}/", isbn);
+        self.get_book_internal(url).await
+    }
+
+    pub async fn get_book_info(&self, id: &String) -> Result<DoubanBook> {
+        if BOOK_CACHE.get(id).is_some() {
+            return Ok(BOOK_CACHE.get(id).unwrap());
+        }
+        let url = format!("https://book.douban.com/subject/{}/", id);
+        self.get_book_internal(url).await
     }
 
     fn get_text(&self, e: &BoxDynElement) -> String {
