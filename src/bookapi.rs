@@ -130,20 +130,22 @@ impl DoubanBookApi {
     async fn get_book_internal(&self, url: String) -> Result<DoubanBook> {
         let res = self.client.get(url).send().await?.error_for_status();
         let result_text: String;
+        let id: String;
         match res {
             Err(e) => {
                 println!("{}", e);
                 return Err(anyhow::Error::from(e));
             }
-            Ok(t) => result_text = (t.text().await?).clone(),
+            Ok(t) => {
+                let t_url = t.url().as_str();
+                let t_array = t_url.split('/').collect::<Vec<&str>>();
+                id=t_array[t_array.len()-2].to_string();
+                result_text = (t.text().await?).clone()
+            },
         }
 
         let document = Vis::load(&result_text).unwrap();
         let x = document.find("#wrapper");
-        let id = document
-            .find("//meta[@property='og:url']/content[0]")
-            .text()
-            .to_string();
         let title = x.find("h1>span:first-child").text().to_string();
         let large_img = x.find("a.nbg").attr("href").unwrap().to_string();
         let small_img = x.find("a.nbg>img").attr("src").unwrap().to_string();
