@@ -20,7 +20,7 @@ async fn index() -> impl Responder {
        /movies/{sid}/celebrities<br/>
        /celebrities/{cid}<br/>
        /photo/{sid}<br/>
-       /v2/book/search?q={book_name}<br/>
+       /v2/book/search/?q={book_name}<br/>
        /v2/book/{sid}<br/>
        /v2/book/isbn/{isbn}<br/>
     "#,
