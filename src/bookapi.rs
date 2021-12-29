@@ -1,6 +1,7 @@
 use anyhow::Result;
 use lazy_static::*;
 use moka::future::{Cache, CacheBuilder};
+use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -20,6 +21,7 @@ const CACHE_SIZE: usize = 100;
 #[derive(Clone)]
 pub struct DoubanBookApi {
     client: reqwest::Client, //请求客户端
+    re_id: Regex,            //id 正则
 }
 
 impl DoubanBookApi {
@@ -34,14 +36,15 @@ impl DoubanBookApi {
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
-        Self { client }
+        let re_id = Regex::new(r"sid: (\d+?),").unwrap();
+        Self { client, re_id }
     }
 
     pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult> {
         let ids = self.get_ids(q, count).await.unwrap();
         let mut list = Vec::with_capacity(ids.len());
         for i in ids {
-            if !i.title.contains(q) {
+            if !i.title.contains(q) && !q.contains(&i.title) {
                 continue;
             }
             match self.get_book_info(&i.id).await {
@@ -61,27 +64,32 @@ impl DoubanBookApi {
         if q.is_empty() {
             return Ok(vec);
         }
-
-        let url = "https://m.douban.com/j/search/";
+        let url = "https://www.douban.com/search";
         let res = self
             .client
             .get(url)
-            .query(&[("q", q), ("t", "book")])
+            .query(&[("cat", "1001"), ("q", q)])
             .send()
             .await?
             .error_for_status();
         match res {
             Ok(res) => {
-                let res = res.json::<HtmlResult>().await?;
-                let document = Vis::load(&res.html).unwrap();
+                let res = res.text().await?;
+                let document = Vis::load(&res).unwrap();
                 vec = document
-                    .find("li")
+                    .find("div.result-list")
+                    .first()
+                    .find(".result")
                     .map(|_index, x| {
-                        let dom = Vis::dom(x);
-                        let title = dom.find("a div span").first().text().to_string();
-                        let href = dom.find("a").attr("href").unwrap().to_string();
-                        let t_array = href.split('/').collect::<Vec<&str>>();
-                        let id = t_array[t_array.len() - 2].to_string();
+                        let x = Vis::dom(x);
+                        let onclick = x.find("div.title a").attr("onclick").unwrap().to_string();
+                        let title = x.find("div.title a").text().to_string();
+                        let mut m_id = String::from("");
+                        for c in self.re_id.captures_iter(&onclick) {
+                            m_id = c[1].to_string();
+                        }
+                        let id = m_id;
+                        println!("{} {}", title, id);
                         BookListItem { title, id }
                     })
                     .into_iter()

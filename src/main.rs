@@ -85,6 +85,11 @@ async fn books(query: web::Query<Search>, book_api: web::Data<DoubanBookApi>) ->
         return Ok("[]".to_string());
     }
     let count = query.count.unwrap_or(2);
+    if count > 20 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "{\"message\":\"count不能大于20\"}",
+        ));
+    }
     let result = book_api.search(&query.q, count).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
