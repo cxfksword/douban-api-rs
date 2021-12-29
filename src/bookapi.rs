@@ -80,12 +80,9 @@ impl DoubanBookApi {
                         let dom = Vis::dom(x);
                         let title = dom.find("a div span").first().text().to_string();
                         let href = dom.find("a").attr("href").unwrap().to_string();
-                        let t_array = href.split("/").collect::<Vec<&str>>();
+                        let t_array = href.split('/').collect::<Vec<&str>>();
                         let id = t_array[t_array.len() - 2].to_string();
-                        BookListItem {
-                            title: title,
-                            id: id,
-                        }
+                        BookListItem { title, id }
                     })
                     .into_iter()
                     .take(count as usize)
@@ -112,7 +109,7 @@ impl DoubanBookApi {
                 let t_url = t.url().as_str();
                 let t_array = t_url.split('/').collect::<Vec<&str>>();
                 id = t_array[t_array.len() - 2].to_string();
-                result_text = (t.text().await?).clone()
+                result_text = t.text().await?
             }
         }
 
@@ -124,9 +121,7 @@ impl DoubanBookApi {
         let content = x.find("#content");
         let mut tags = Vec::default();
         x.find("a.tag").map(|_index, t| {
-            tags.push(Tag {
-                name: t.text().to_string(),
-            });
+            tags.push(Tag { name: t.text() });
         });
 
         let rating_str = content
@@ -145,8 +140,7 @@ impl DoubanBookApi {
             .find("#link-report :not(.short) .intro")
             .text()
             .trim()
-            .replace("©豆瓣", "")
-            .to_string();
+            .replace("©豆瓣", "");
         let author_intro = content
             .find("div.related_info .all .intro ")
             .text()
@@ -223,6 +217,7 @@ impl DoubanBookApi {
             small: small_img,
         };
         let cache_key = id.clone();
+        let cache_key1 = isbn13.clone();
         let info = DoubanBook {
             id,
             author,
@@ -246,10 +241,15 @@ impl DoubanBookApi {
             origin,
         };
         BOOK_CACHE.insert(cache_key, info.clone()).await;
+        BOOK_CACHE.insert(cache_key1, info.clone()).await;
         Ok(info)
     }
 
-    pub async fn get_book_info_by_isbn(&self, isbn: &str) -> Result<DoubanBook> {
+    pub async fn get_book_info_by_isbn(&self, isbn: &String) -> Result<DoubanBook> {
+        if BOOK_CACHE.get(isbn).is_some() {
+            return Ok(BOOK_CACHE.get(isbn).unwrap());
+        }
+
         let url = format!("https://douban.com/isbn/{}/", isbn);
         self.get_book_internal(url).await
     }
