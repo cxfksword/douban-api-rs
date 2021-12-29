@@ -34,9 +34,7 @@ impl DoubanBookApi {
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
-        Self {
-            client,
-        }
+        Self { client }
     }
 
     pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult> {
@@ -169,64 +167,58 @@ impl DoubanBookApi {
         let mut isbn13 = String::new();
         let category = String::from(""); //TODO 页面上是在找不到分类...
         let info = content.find("#info");
-        let info_array = info.text().trim().split('\n')
-        .filter(|&x| !x.trim().is_empty())
-        .map(|x| x.trim())
-        .collect::<Vec<&str>>();
+        let info_array = info
+            .text()
+            .trim()
+            .split('\n')
+            .filter(|&x| !x.trim().is_empty())
+            .map(|x| x.trim())
+            .collect::<Vec<&str>>();
         let mut i = 0;
         loop {
             match info_array[i] {
                 "作者:" => {
-                    self.get_texts(&info_array[i+1..], &mut author);
-                    i+=1;
+                    self.get_texts(&info_array[i + 1..], &mut author);
+                    i += 1;
                     continue;
-                },
+                }
                 "译者:" => {
-                    self.get_texts(&info_array[i+1..], &mut translators);
-                    i+=1;
+                    self.get_texts(&info_array[i + 1..], &mut translators);
+                    i += 1;
                     continue;
-                },
+                }
                 _ => {}
             }
 
             if info_array[i].starts_with("出品方:") {
                 producer = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("出版社:") {
+            } else if info_array[i].starts_with("出版社:") {
                 publisher = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("副标题:") {
+            } else if info_array[i].starts_with("副标题:") {
                 subtitle = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("原作名:") {
+            } else if info_array[i].starts_with("原作名:") {
                 origin = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("出版年:") {
+            } else if info_array[i].starts_with("出版年:") {
                 pubdate = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("页数:") {
+            } else if info_array[i].starts_with("页数:") {
                 pages = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("定价:") {
+            } else if info_array[i].starts_with("定价:") {
                 price = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("装帧:") {
+            } else if info_array[i].starts_with("装帧:") {
                 binding = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("丛书:") {
+            } else if info_array[i].starts_with("丛书:") {
                 serials = self.get_text(info_array[i])
-            }
-            else if info_array[i].starts_with("ISBN:") {
+            } else if info_array[i].starts_with("ISBN:") {
                 isbn13 = self.get_text(info_array[i])
             }
 
             if i == info_array.len() - 1 {
                 break;
             }
-            i+=1;
+            i += 1;
         }
         let images = Image {
-            medium: "".to_string(),
+            medium: large_img.clone(),
             large: large_img,
             small: small_img,
         };
