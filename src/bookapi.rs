@@ -278,6 +278,9 @@ impl DoubanBookApi {
             if e.contains(":") {
                 break;
             }
+            if e == &"/" {
+                continue;
+            }
             vec.push(e.trim().to_string());
         }
     }
