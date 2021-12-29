@@ -83,13 +83,12 @@ impl DoubanBookApi {
                     .map(|_index, x| {
                         let x = Vis::dom(x);
                         let onclick = x.find("div.title a").attr("onclick").unwrap().to_string();
-                        let title = x.find("div.title a").text().to_string();
+                        let title = x.find("div.title a").text().trim().to_string();
                         let mut m_id = String::from("");
                         for c in self.re_id.captures_iter(&onclick) {
-                            m_id = c[1].to_string();
+                            m_id = c[1].trim().to_string();
                         }
                         let id = m_id;
-                        println!("{} {}", title, id);
                         BookListItem { title, id }
                     })
                     .into_iter()
