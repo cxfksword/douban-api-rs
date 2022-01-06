@@ -20,8 +20,9 @@ async fn index() -> impl Responder {
        /movies/{sid}/celebrities<br/>
        /celebrities/{cid}<br/>
        /photo/{sid}<br/>
-       /book?q={book_name}<br/>
-       /book/{sid}<br/>
+       /v2/book/search/?q={book_name}<br/>
+       /v2/book/{sid}<br/>
+       /v2/book/isbn/{isbn}<br/>
     "#,
         )
 }
@@ -78,20 +79,37 @@ async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
     Ok(serde_json::to_string(&result).unwrap())
 }
 
-#[get("/book")]
+#[get("/v2/book/search/")]
 async fn books(query: web::Query<Search>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
     let count = query.count.unwrap_or(2);
+    if count > 20 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "{\"message\":\"count不能大于20\"}",
+        ));
+    }
     let result = book_api.search(&query.q, count).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
-#[get("/book/{sid}")]
+#[get("/v2/book/{sid}")]
 async fn book(path: web::Path<String>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
     let sid = path.into_inner();
     match book_api.get_book_info(&sid).await {
+        Ok(info) => Ok(serde_json::to_string(&info).unwrap()),
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+    }
+}
+
+#[get("/v2/book/isbn/{isbn}")]
+async fn book_by_isbn(
+    path: web::Path<String>,
+    book_api: web::Data<DoubanBookApi>,
+) -> Result<String> {
+    let isbn = path.into_inner();
+    match book_api.get_book_info_by_isbn(&isbn).await {
         Ok(info) => Ok(serde_json::to_string(&info).unwrap()),
         Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
     }
@@ -127,6 +145,7 @@ async fn main() -> std::io::Result<()> {
             .service(photo)
             .service(book)
             .service(books)
+            .service(book_by_isbn)
             .service(proxy)
     })
     .bind((opt.host, opt.port))?

@@ -5,14 +5,15 @@
 ## 支持的api
 
 ```
-/movies?q={movie_name}            # 搜索电影
-/movies?q={movie_name}&type=full  # 搜索电影并获取详细信息
-/movies/{sid}                     # 获取指定电影信息
-/movies/{sid}/celebrities         # 获取演员列表
-/celebrities/{cid}                # 获取演员信息
-/photo/{sid}                      # 获取电影壁纸
-/book?q={book_name}               # 搜索书籍
-/book/{sid}                       # 获取指定书籍
+/movies?q={movie_name}                  # 搜索电影
+/movies?q={movie_name}&type=full        # 搜索电影并获取详细信息
+/movies/{sid}                           # 获取指定电影信息
+/movies/{sid}/celebrities               # 获取演员列表
+/celebrities/{cid}                      # 获取演员信息
+/photo/{sid}                            # 获取电影壁纸
+/v2/book/search/?q={book_name}&count=2  # 搜索书籍  count可不传,默认为2,最大20,为返回书籍信息数量
+/v2/book/isbn/{isbn}                    # 获取指定isbn的书籍
+/v2/book/{sid}                          # 获取指定id的书籍
 ```
 
 ## docker运行

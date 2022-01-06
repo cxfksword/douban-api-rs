@@ -201,12 +201,7 @@ impl Douban {
             .to_string();
         let img = x.find("a.nbgnbg>img").attr("src").unwrap().to_string();
 
-        let intro = x
-            .find("div.indent>span")
-            .text()
-            .trim()
-            .replace("©豆瓣", "")
-            .to_string();
+        let intro = x.find("div.indent>span").text().trim().replace("©豆瓣", "");
         let info = x.find("#info").text().to_string();
         let (
             director,
