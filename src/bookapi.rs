@@ -40,7 +40,7 @@ impl DoubanBookApi {
         Self { client, re_id }
     }
 
-    pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult<BookListItem>> {
+    pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult<DoubanBook>> {
         let list = self.get_list(q, count).await.unwrap();
         Ok(DoubanBookResult {
             code: 0,
@@ -49,7 +49,7 @@ impl DoubanBookApi {
         })
     }
 
-    async fn get_list(&self, q: &str, count: i32) -> Result<Vec<BookListItem>> {
+    async fn get_list(&self, q: &str, count: i32) -> Result<Vec<DoubanBook>> {
         let mut vec = Vec::with_capacity(count as usize);
         if q.is_empty() {
             return Ok(vec);
@@ -104,20 +104,13 @@ impl DoubanBookApi {
                             Rating::new(rate.parse::<f32>().unwrap())
                         };
                         let images = Image::new(large);
-                        BookListItem {
-                            title,
-                            id,
-                            author,
-                            pubdate,
-                            publisher,
-                            images,
-                            rating,
-                            summary,
-                        }
+                        DoubanBook::simple(
+                            id, author, images, rating, pubdate, publisher, summary, title,
+                        )
                     })
                     .into_iter()
                     .take(count as usize)
-                    .collect::<Vec<BookListItem>>();
+                    .collect::<Vec<DoubanBook>>();
             }
             Err(err) => {
                 println!("错误: {:?}", err);
@@ -339,6 +332,42 @@ pub struct DoubanBook {
     title: String,            //书名
     tags: Vec<Tag>,           //标签
     origin: String,           //原作名
+}
+
+impl DoubanBook {
+    fn simple(
+        id: String,
+        author: Vec<String>,
+        images: Image,
+        rating: Rating,
+        pubdate: String,
+        publisher: String,
+        summary: String,
+        title: String,
+    ) -> DoubanBook {
+        DoubanBook {
+            id,
+            author,
+            author_intro: String::new(),
+            translators: Vec::new(),
+            images,
+            binding: String::new(),
+            category: String::new(),
+            rating,
+            isbn13: String::new(),
+            pages: String::new(),
+            price: String::new(),
+            pubdate,
+            publisher,
+            producer: String::new(),
+            serials: String::new(),
+            subtitle: String::new(),
+            summary,
+            title,
+            tags: Vec::new(),
+            origin: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
