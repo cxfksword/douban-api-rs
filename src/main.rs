@@ -20,8 +20,8 @@ async fn index() -> impl Responder {
        /movies/{sid}/celebrities<br/>
        /celebrities/{cid}<br/>
        /photo/{sid}<br/>
-       /v2/book/search/?q={book_name}<br/>
-       /v2/book/{sid}<br/>
+       /v2/book/search?q={book_name}<br/>
+       /v2/book/id/{sid}<br/>
        /v2/book/isbn/{isbn}<br/>
     "#,
         )
@@ -79,7 +79,7 @@ async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result
     Ok(serde_json::to_string(&result).unwrap())
 }
 
-#[get("/v2/book/search/")]
+#[get("/v2/book/search")]
 async fn books(query: web::Query<Search>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
     if query.q.is_empty() {
         return Ok("[]".to_string());
@@ -94,7 +94,7 @@ async fn books(query: web::Query<Search>, book_api: web::Data<DoubanBookApi>) ->
     Ok(serde_json::to_string(&result).unwrap())
 }
 
-#[get("/v2/book/{sid}")]
+#[get("/v2/book/id/{sid}")]
 async fn book(path: web::Path<String>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
     let sid = path.into_inner();
     match book_api.get_book_info(&sid).await {

@@ -40,18 +40,8 @@ impl DoubanBookApi {
         Self { client, re_id }
     }
 
-    pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult> {
-        let ids = self.get_ids(q, count).await.unwrap();
-        let mut list = Vec::with_capacity(ids.len());
-        for i in ids {
-            if !i.title.contains(q) && !q.contains(&i.title) {
-                continue;
-            }
-            match self.get_book_info(&i.id).await {
-                Ok(info) => list.push(info),
-                Err(_e) => {}
-            }
-        }
+    pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult<DoubanBook>> {
+        let list = self.get_list(q, count).await.unwrap();
         Ok(DoubanBookResult {
             code: 0,
             books: list,
@@ -59,7 +49,7 @@ impl DoubanBookApi {
         })
     }
 
-    async fn get_ids(&self, q: &str, count: i32) -> Result<Vec<BookListItem>> {
+    async fn get_list(&self, q: &str, count: i32) -> Result<Vec<DoubanBook>> {
         let mut vec = Vec::with_capacity(count as usize);
         if q.is_empty() {
             return Ok(vec);
@@ -84,16 +74,43 @@ impl DoubanBookApi {
                         let x = Vis::dom(x);
                         let onclick = x.find("div.title a").attr("onclick").unwrap().to_string();
                         let title = x.find("div.title a").text().trim().to_string();
+                        let summary = x.find("p").text().trim().to_string();
+                        let large = x.find(".pic img").attr("src").unwrap().to_string();
+                        let rate = x.find(".rating_nums").text().to_string();
+                        let sub_str = x.find(".subject-cast").text().to_string();
+                        let subjects: Vec<&str> = sub_str.split('/').collect();
+                        let len = subjects.len();
+                        let pubdate = subjects[len - 1].trim().to_string();
+                        let publisher = subjects[len - 2].trim().to_string();
+                        let mut author = Vec::with_capacity(len - 2);
+                        let mut i = 0;
+                        for elem in subjects {
+                            author.push(elem.trim().to_string());
+                            i += 1;
+                            if i == len - 2 {
+                                break;
+                            }
+                        }
+
                         let mut m_id = String::from("");
                         for c in self.re_id.captures_iter(&onclick) {
                             m_id = c[1].trim().to_string();
                         }
                         let id = m_id;
-                        BookListItem { title, id }
+
+                        let rating = if rate.is_empty() {
+                            Rating::new(0.0)
+                        } else {
+                            Rating::new(rate.parse::<f32>().unwrap())
+                        };
+                        let images = Image::new(large);
+                        DoubanBook::simple(
+                            id, author, images, rating, pubdate, publisher, summary, title,
+                        )
                     })
                     .into_iter()
                     .take(count as usize)
-                    .collect::<Vec<BookListItem>>();
+                    .collect::<Vec<DoubanBook>>();
             }
             Err(err) => {
                 println!("错误: {:?}", err);
@@ -287,10 +304,10 @@ impl DoubanBookApi {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DoubanBookResult {
+pub struct DoubanBookResult<T> {
     code: u32,
     msg: String,
-    books: Vec<DoubanBook>,
+    books: Vec<T>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -317,11 +334,57 @@ pub struct DoubanBook {
     origin: String,           //原作名
 }
 
+impl DoubanBook {
+    fn simple(
+        id: String,
+        author: Vec<String>,
+        images: Image,
+        rating: Rating,
+        pubdate: String,
+        publisher: String,
+        summary: String,
+        title: String,
+    ) -> DoubanBook {
+        DoubanBook {
+            id,
+            author,
+            author_intro: String::new(),
+            translators: Vec::new(),
+            images,
+            binding: String::new(),
+            category: String::new(),
+            rating,
+            isbn13: String::new(),
+            pages: String::new(),
+            price: String::new(),
+            pubdate,
+            publisher,
+            producer: String::new(),
+            serials: String::new(),
+            subtitle: String::new(),
+            summary,
+            title,
+            tags: Vec::new(),
+            origin: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Image {
     small: String,
     medium: String,
     large: String,
+}
+
+impl Image {
+    fn new(large: String) -> Image {
+        Image {
+            large: large,
+            medium: String::new(),
+            small: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,6 +397,12 @@ pub struct Rating {
     average: f32,
 }
 
+impl Rating {
+    fn new(rating: f32) -> Rating {
+        Rating { average: rating }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HtmlResult {
     count: i32,
@@ -343,6 +412,12 @@ pub struct HtmlResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BookListItem {
-    title: String,
-    id: String,
+    title: String,       //书名
+    id: String,          //id
+    author: Vec<String>, //作者
+    pubdate: String,     //出版时间
+    publisher: String,   //出版社
+    images: Image,       //封面
+    rating: Rating,      //评分
+    summary: String,     //简介
 }

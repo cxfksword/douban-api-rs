@@ -40,6 +40,7 @@ pub struct Douban {
     re_subname: Regex,
     re_imdb: Regex,
     re_site: Regex,
+    re_name_math: Regex,
 }
 
 impl Douban {
@@ -76,7 +77,7 @@ impl Douban {
         let re_subname = Regex::new(r"又名: (.+?)\n").unwrap();
         let re_imdb = Regex::new(r"IMDb: (.+?)\n").unwrap();
         let re_site = Regex::new(r"官方网站: (.+?)\n").unwrap();
-
+        let re_name_math = Regex::new(r"(.+第\w季|[\w\uff1a\uff01\uff0c\u00b7]+)\s*(.*)").unwrap();
         Self {
             client,
             search_limit_size,
@@ -96,6 +97,7 @@ impl Douban {
             re_subname,
             re_imdb,
             re_site,
+            re_name_math,
         }
     }
 
@@ -191,7 +193,11 @@ impl Douban {
         let x = document.find("#content");
 
         let sid = sid.to_string();
-        let name = x.find("h1>span:first-child").text().to_string();
+        let name_str = x.find("h1>span:first-child").text().to_string();
+        let cs = self.re_name_math.captures(&name_str).unwrap();
+        let name = (&cs[1]).to_string();
+        let original_name = (&cs[2]).to_string();
+
         let year_str = x.find("h1>span.year").text().to_string();
         let year = self.parse_year_for_detail(&year_str);
 
@@ -240,6 +246,7 @@ impl Douban {
         let info = MovieInfo {
             sid,
             name,
+            originalName: original_name,
             rating,
             img,
             year,
@@ -613,6 +620,7 @@ pub struct Movie {
 pub struct MovieInfo {
     sid: String,
     name: String,
+    originalName: String,
     rating: String,
     img: String,
     year: String,
