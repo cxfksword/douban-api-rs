@@ -80,16 +80,28 @@ impl DoubanBookApi {
                         let sub_str = x.find(".subject-cast").text().to_string();
                         let subjects: Vec<&str> = sub_str.split('/').collect();
                         let len = subjects.len();
-                        let pubdate = subjects[len - 1].trim().to_string();
-                        let publisher = subjects[len - 2].trim().to_string();
-                        let mut author = Vec::with_capacity(len - 2);
-                        let mut i = 0;
-                        for elem in subjects {
-                            author.push(elem.trim().to_string());
-                            i += 1;
-                            if i == len - 2 {
-                                break;
+                        let mut pubdate = String::from("");
+                        let mut publisher = String::from("");
+                        let mut author = Vec::new();
+                        if len >= 3 {
+                            pubdate = subjects[len - 1].trim().to_string();
+                            publisher = subjects[len - 2].trim().to_string();
+                            let mut i = 0;
+                            for elem in subjects {
+                                author.push(elem.trim().to_string());
+                                i += 1;
+                                if i == len - 2 {
+                                    break;
+                                }
                             }
+                        } else if len == 2 {
+                            author.push(subjects[0].trim().to_string());
+                            match subjects[1].parse::<i32>() {
+                                Ok(_t) => pubdate = subjects[1].trim().to_string(),
+                                Err(_e) => publisher = subjects[1].trim().to_string(),
+                            }
+                        } else if len == 1 {
+                            author.push(subjects[0].trim().to_string());
                         }
 
                         let mut m_id = String::from("");
