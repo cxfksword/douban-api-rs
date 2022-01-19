@@ -78,20 +78,20 @@ impl DoubanBookApi {
                         let large = x.find(".pic img").attr("src").unwrap().to_string();
                         let rate = x.find(".rating_nums").text().to_string();
                         let sub_str = x.find(".subject-cast").text().to_string();
-                        let subjects : Vec<&str> = sub_str.split('/').collect();
+                        let subjects: Vec<&str> = sub_str.split('/').collect();
                         let len = subjects.len();
                         let pubdate = subjects[len - 1].trim().to_string();
                         let publisher = subjects[len - 2].trim().to_string();
-                        let mut author = Vec::with_capacity(len-2);
+                        let mut author = Vec::with_capacity(len - 2);
                         let mut i = 0;
                         for elem in subjects {
                             author.push(elem.trim().to_string());
-                            i+=1;
+                            i += 1;
                             if i == len - 2 {
                                 break;
                             }
                         }
-                        
+
                         let mut m_id = String::from("");
                         for c in self.re_id.captures_iter(&onclick) {
                             m_id = c[1].trim().to_string();
@@ -104,7 +104,16 @@ impl DoubanBookApi {
                             Rating::new(rate.parse::<f32>().unwrap())
                         };
                         let images = Image::new(large);
-                        BookListItem { title, id, author, pubdate, publisher, images,rating, summary }
+                        BookListItem {
+                            title,
+                            id,
+                            author,
+                            pubdate,
+                            publisher,
+                            images,
+                            rating,
+                            summary,
+                        }
                     })
                     .into_iter()
                     .take(count as usize)
@@ -361,9 +370,7 @@ pub struct Rating {
 
 impl Rating {
     fn new(rating: f32) -> Rating {
-        Rating {
-            average: rating
-        }
+        Rating { average: rating }
     }
 }
 
@@ -376,12 +383,12 @@ pub struct HtmlResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BookListItem {
-    title: String,            //书名
-    id: String,               //id
-    author: Vec<String>,      //作者
-    pubdate: String,          //出版时间
-    publisher: String,        //出版社
-    images: Image,            //封面
-    rating: Rating,           //评分
-    summary: String,          //简介
+    title: String,       //书名
+    id: String,          //id
+    author: Vec<String>, //作者
+    pubdate: String,     //出版时间
+    publisher: String,   //出版社
+    images: Image,       //封面
+    rating: Rating,      //评分
+    summary: String,     //简介
 }
