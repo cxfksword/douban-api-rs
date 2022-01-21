@@ -194,7 +194,6 @@ impl DoubanBookApi {
             .html()
             .trim()
             .to_string();
-        println!("{}", author_intro);
         if author_intro.is_empty() {
             author_intro = content
                 .find(".related_info > div:nth-child(5) > div > .intro")
