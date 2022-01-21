@@ -179,15 +179,29 @@ impl DoubanBookApi {
                 average: rating_str.parse::<f32>().unwrap(),
             }
         };
-        let summary = content
+        let mut summary = content
             .find("#link-report .hidden .intro")
             .html()
             .replace("©豆瓣", "");
-        let author_intro = content
+        if summary.is_empty() {
+            summary = content
+                .find("#link-report .intro")
+                .html()
+                .replace("©豆瓣", "");
+        }
+        let mut author_intro = content
             .find(".related_info > .indent:not(id) > .all .intro")
             .html()
             .trim()
             .to_string();
+        println!("{}", author_intro);
+        if author_intro.is_empty() {
+            author_intro = content
+                .find(".related_info > div:nth-child(5) > div > .intro")
+                .html()
+                .trim()
+                .to_string();
+        }
 
         let mut author = Vec::with_capacity(1);
         let mut translators = Vec::with_capacity(1);
