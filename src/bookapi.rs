@@ -116,9 +116,16 @@ impl DoubanBookApi {
                             Rating::new(rate.parse::<f32>().unwrap())
                         };
                         let images = Image::new(large);
-                        DoubanBook::simple(
-                            id, author, images, rating, pubdate, publisher, summary, title,
-                        )
+                        DoubanBook::simple(SimpleDoubanBook {
+                            id,
+                            author,
+                            images,
+                            rating,
+                            pubdate,
+                            publisher,
+                            summary,
+                            title,
+                        })
                     })
                     .into_iter()
                     .take(count as usize)
@@ -173,13 +180,12 @@ impl DoubanBookApi {
             }
         };
         let summary = content
-            .find("#link-report :not(.short) .intro")
-            .text()
-            .trim()
+            .find("#link-report .hidden .intro")
+            .html()
             .replace("©豆瓣", "");
         let author_intro = content
-            .find("div.related_info .all .intro ")
-            .text()
+            .find(".related_info > .indent:not(id) > .all .intro")
+            .html()
             .trim()
             .to_string();
 
@@ -281,18 +287,20 @@ impl DoubanBookApi {
         Ok(info)
     }
 
-    pub async fn get_book_info_by_isbn(&self, isbn: &String) -> Result<DoubanBook> {
-        if BOOK_CACHE.get(isbn).is_some() {
-            return Ok(BOOK_CACHE.get(isbn).unwrap());
+    pub async fn get_book_info_by_isbn(&self, isbn: &str) -> Result<DoubanBook> {
+        let cache_key = isbn.to_string();
+        if BOOK_CACHE.get(&cache_key).is_some() {
+            return Ok(BOOK_CACHE.get(&cache_key).unwrap());
         }
 
         let url = format!("https://douban.com/isbn/{}/", isbn);
         self.get_book_internal(url).await
     }
 
-    pub async fn get_book_info(&self, id: &String) -> Result<DoubanBook> {
-        if BOOK_CACHE.get(id).is_some() {
-            return Ok(BOOK_CACHE.get(id).unwrap());
+    pub async fn get_book_info(&self, id: &str) -> Result<DoubanBook> {
+        let cache_key = id.to_string();
+        if BOOK_CACHE.get(&cache_key).is_some() {
+            return Ok(BOOK_CACHE.get(&cache_key).unwrap());
         }
         let url = format!("https://book.douban.com/subject/{}/", id);
         self.get_book_internal(url).await
@@ -304,7 +312,7 @@ impl DoubanBookApi {
 
     fn get_texts(&self, array: &[&str], vec: &mut Vec<String>) {
         for e in array {
-            if e.contains(":") {
+            if e.contains(':') {
                 break;
             }
             if e == &"/" {
@@ -346,36 +354,38 @@ pub struct DoubanBook {
     origin: String,           //原作名
 }
 
+pub struct SimpleDoubanBook {
+    id: String,
+    author: Vec<String>,
+    images: Image,
+    rating: Rating,
+    pubdate: String,
+    publisher: String,
+    summary: String,
+    title: String,
+}
+
 impl DoubanBook {
-    fn simple(
-        id: String,
-        author: Vec<String>,
-        images: Image,
-        rating: Rating,
-        pubdate: String,
-        publisher: String,
-        summary: String,
-        title: String,
-    ) -> DoubanBook {
+    fn simple(info: SimpleDoubanBook) -> DoubanBook {
         DoubanBook {
-            id,
-            author,
+            id: info.id,
+            author: info.author,
             author_intro: String::new(),
             translators: Vec::new(),
-            images,
+            images: info.images,
             binding: String::new(),
             category: String::new(),
-            rating,
+            rating: info.rating,
             isbn13: String::new(),
             pages: String::new(),
             price: String::new(),
-            pubdate,
-            publisher,
+            pubdate: info.pubdate,
+            publisher: info.publisher,
             producer: String::new(),
             serials: String::new(),
             subtitle: String::new(),
-            summary,
-            title,
+            summary: info.summary,
+            title: info.title,
             tags: Vec::new(),
             origin: String::new(),
         }
@@ -392,7 +402,7 @@ pub struct Image {
 impl Image {
     fn new(large: String) -> Image {
         Image {
-            large: large,
+            large,
             medium: String::new(),
             small: String::new(),
         }
