@@ -246,7 +246,7 @@ impl Douban {
         let info = MovieInfo {
             sid,
             name,
-            originalName: original_name,
+            original_name,
             rating,
             img,
             year,
@@ -620,7 +620,8 @@ pub struct Movie {
 pub struct MovieInfo {
     sid: String,
     name: String,
-    originalName: String,
+    #[serde(rename = "originalName")]
+    original_name: String,
     rating: String,
     img: String,
     year: String,
