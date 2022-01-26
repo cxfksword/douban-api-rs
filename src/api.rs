@@ -131,7 +131,11 @@ impl Douban {
                     .map(|_index, x| {
                         let x = Vis::dom(x);
                         let rating = x.find("div.rating-info>.rating_nums").text().to_string();
-                        let onclick = x.find("div.title a").attr("onclick").unwrap().to_string();
+                        let onclick_attr = x.find("div.title a").attr("onclick");
+                        let onclick = match onclick_attr {
+                            Some(onclick) => onclick.to_string(),
+                            None => String::new(),
+                        };
                         let mut img = x.find("a.nbg>img").attr("src").unwrap().to_string();
                         if !proxy.is_empty() {
                             img = format!("{}?url={}", proxy, encode(&img));
