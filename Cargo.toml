@@ -18,11 +18,11 @@ tokio = { version = "1.10.0", features = ["rt-multi-thread", "io-util", "net", "
 visdom = "0.4.10"
 regex = "1.5.4"
 serde_json = "1.0"
-structopt = "0.3.22"
 env_logger = "0.8"
 futures = "0.3"
 urlencoding = "2.1.0"
 lazy_static = "1.4.0"
+clap = { version = "3.0.1", features = ["derive", "env", "wrap_help"] }
 
 
 [features]

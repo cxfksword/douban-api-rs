@@ -3,9 +3,9 @@ mod api;
 mod bookapi;
 use api::Douban;
 use bookapi::DoubanBookApi;
+use clap::Parser;
 use serde::Deserialize;
 use std::env;
-use structopt::StructOpt;
 
 #[get("/")]
 async fn index() -> impl Responder {
@@ -43,7 +43,7 @@ async fn movies(
         Ok(serde_json::to_string(&result).unwrap())
     } else {
         let result = douban_api
-            .search(&query.q, count, &opt.proxy)
+            .search(&query.q, count, &opt.img_proxy)
             .await
             .unwrap();
         Ok(serde_json::to_string(&result).unwrap())
@@ -128,7 +128,8 @@ async fn proxy(query: web::Query<Proxy>, douban_api: web::Data<Douban>) -> impl 
 async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info,actix_server=info");
     env_logger::init();
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
+    println!("{:?}", opt);
     let douban = Douban::new(opt.limit);
 
     HttpServer::new(move || {
@@ -136,7 +137,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::new("%a \"%r\" %s %b %T"))
             .app_data(web::Data::new(douban.clone()))
             .app_data(web::Data::new(DoubanBookApi::new()))
-            .app_data(web::Data::new(Opt::from_args()))
+            .app_data(web::Data::new(Opt::parse()))
             .service(index)
             .service(movies)
             .service(movie)
@@ -153,18 +154,18 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "douban-api-rs")]
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
 struct Opt {
     /// Listen host
-    #[structopt(long, default_value = "0.0.0.0")]
+    #[clap(long, default_value = "0.0.0.0")]
     host: String,
     /// Listen port
-    #[structopt(short, long, default_value = "8080")]
+    #[clap(short, long, default_value = "8080")]
     port: u16,
-    #[structopt(short = "I", long, default_value = "")]
-    proxy: String,
-    #[structopt(long, default_value = "3")]
+    #[clap(short, long, default_value = "", env = "DOUBAN_API_IMG_PROXY")]
+    img_proxy: String,
+    #[clap(short, long, default_value = "3", env = "DOUBAN_API_LIMIT_SIZE")]
     limit: usize,
 }
 
