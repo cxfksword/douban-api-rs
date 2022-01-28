@@ -129,7 +129,6 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info,actix_server=info");
     env_logger::init();
     let opt = Opt::parse();
-    println!("{:?}", opt);
     let douban = Douban::new(opt.limit);
 
     HttpServer::new(move || {
