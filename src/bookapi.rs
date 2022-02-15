@@ -194,7 +194,7 @@ impl DoubanBookApi {
             .to_string();
         if author_intro.is_empty() {
             author_intro = content
-                .find(".related_info .indent:not([id]) .intro")//#content > div > div.article > div.related_info > div:nth-child(5) > div > div
+                .find(".related_info .indent:not([id]) .intro")
                 .html()
                 .trim()
                 .to_string();
