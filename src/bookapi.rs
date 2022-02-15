@@ -179,13 +179,9 @@ impl DoubanBookApi {
                 average: rating_str.parse::<f32>().unwrap(),
             }
         };
-        let mut summary = content
-            .find("#link-report .hidden .intro")
-            .html();
+        let mut summary = content.find("#link-report .hidden .intro").html();
         if summary.is_empty() {
-            summary = content
-                .find("#link-report .intro")
-                .html();
+            summary = content.find("#link-report .intro").html();
         }
         let mut author_intro = content
             .find(".related_info .indent:not([id]) > .all.hidden .intro")
