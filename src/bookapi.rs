@@ -181,22 +181,20 @@ impl DoubanBookApi {
         };
         let mut summary = content
             .find("#link-report .hidden .intro")
-            .html()
-            .replace("©豆瓣", "");
+            .html();
         if summary.is_empty() {
             summary = content
                 .find("#link-report .intro")
-                .html()
-                .replace("©豆瓣", "");
+                .html();
         }
         let mut author_intro = content
-            .find(".related_info > .indent:not(id) > .all .intro")
+            .find(".related_info .indent:not([id]) > .all.hidden .intro")
             .html()
             .trim()
             .to_string();
         if author_intro.is_empty() {
             author_intro = content
-                .find(".related_info > div:nth-child(5) > div > .intro")
+                .find(".related_info .indent:not([id]) .intro")//#content > div > div.article > div.related_info > div:nth-child(5) > div > div
                 .html()
                 .trim()
                 .to_string();

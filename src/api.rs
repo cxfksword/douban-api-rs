@@ -341,7 +341,7 @@ impl Douban {
         let id = id.to_string();
         let img = x.find("a.nbg>img").attr("src").unwrap().to_string();
         let name = x.find("h1").text().to_string();
-        let mut intro = x.find("#intro span.short").text().trim().to_string();
+        let mut intro = x.find("#intro span.all.hidden").text().trim().to_string();
         if intro.is_empty() {
             intro = x.find("#intro div.bd").text().trim().to_string();
         }
