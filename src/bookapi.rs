@@ -4,6 +4,7 @@ use moka::future::{Cache, CacheBuilder};
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::Duration;
 use visdom::Vis;
 
@@ -20,8 +21,10 @@ const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct DoubanBookApi {
-    client: reqwest::Client, //请求客户端
-    re_id: Regex,            //id 正则
+    client: reqwest::Client,      //请求客户端
+    re_id: Regex,                 //id 正则
+    re_info_pair: Regex,          //匹配:字符两边的信息
+    re_remove_split_space: Regex, //去除/分隔符两边多余空格
 }
 
 impl DoubanBookApi {
@@ -37,7 +40,14 @@ impl DoubanBookApi {
             .build()
             .unwrap();
         let re_id = Regex::new(r"sid: (\d+?),").unwrap();
-        Self { client, re_id }
+        let re_remove_split_space = Regex::new(r"\s+?/\s+").unwrap();
+        let re_info_pair = Regex::new(r"([^\s]+?):\s*([^\n]+)").unwrap();
+        Self {
+            client,
+            re_id,
+            re_info_pair,
+            re_remove_split_space,
+        }
     }
 
     pub async fn search(&self, q: &str, count: i32) -> Result<DoubanBookResult<DoubanBook>> {
@@ -179,9 +189,17 @@ impl DoubanBookApi {
                 average: rating_str.parse::<f32>().unwrap(),
             }
         };
-        let mut summary = content.find("#link-report .hidden .intro").html();
+        let mut summary = content
+            .find("#link-report .hidden .intro")
+            .html()
+            .trim()
+            .to_string();
         if summary.is_empty() {
-            summary = content.find("#link-report .intro").html();
+            summary = content
+                .find("#link-report .intro")
+                .html()
+                .trim()
+                .to_string();
         }
         let mut author_intro = content
             .find(".related_info .indent:not([id]) > .all.hidden .intro")
@@ -196,70 +214,22 @@ impl DoubanBookApi {
                 .to_string();
         }
 
-        let mut author = Vec::with_capacity(1);
-        let mut translators = Vec::with_capacity(1);
-        let mut producer = String::new();
-        let mut serials = String::new();
-        let mut origin = String::new();
-        let mut publisher = String::new();
-        let mut pubdate = String::new();
-        let mut pages = String::new();
-        let mut price = String::new();
-        let mut binding = String::new();
-        let mut subtitle = String::new();
-        let mut isbn13 = String::new();
-        let category = String::from(""); //TODO 页面上是在找不到分类...
         let info = content.find("#info");
-        let info_array = info
-            .text()
-            .trim()
-            .split('\n')
-            .filter(|&x| !x.trim().is_empty())
-            .map(|x| x.trim())
-            .collect::<Vec<&str>>();
-        let mut i = 0;
-        loop {
-            match info_array[i] {
-                "作者:" => {
-                    self.get_texts(&info_array[i + 1..], &mut author);
-                    i += 1;
-                    continue;
-                }
-                "译者:" => {
-                    self.get_texts(&info_array[i + 1..], &mut translators);
-                    i += 1;
-                    continue;
-                }
-                _ => {}
-            }
+        let info_text_map = self.parse_info_text(info.text().trim());
 
-            if info_array[i].starts_with("出品方:") {
-                producer = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("出版社:") {
-                publisher = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("副标题:") {
-                subtitle = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("原作名:") {
-                origin = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("出版年:") {
-                pubdate = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("页数:") {
-                pages = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("定价:") {
-                price = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("装帧:") {
-                binding = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("丛书:") {
-                serials = self.get_text(info_array[i])
-            } else if info_array[i].starts_with("ISBN:") {
-                isbn13 = self.get_text(info_array[i])
-            }
-
-            if i == info_array.len() - 1 {
-                break;
-            }
-            i += 1;
-        }
+        let author = self.get_texts(&info_text_map, "作者");
+        let translators = self.get_texts(&info_text_map, "译者");
+        let producer = self.get_text(&info_text_map, "出品方");
+        let serials = self.get_text(&info_text_map, "丛书");
+        let origin = self.get_text(&info_text_map, "原作名");
+        let publisher = self.get_text(&info_text_map, "出版社");
+        let pubdate = self.get_text(&info_text_map, "出版年");
+        let pages = self.get_text(&info_text_map, "页数");
+        let price = self.get_text(&info_text_map, "定价");
+        let binding = self.get_text(&info_text_map, "装帧");
+        let subtitle = self.get_text(&info_text_map, "副标题");
+        let isbn13 = self.get_text(&info_text_map, "ISBN");
+        let category = String::from(""); //TODO 页面上是在找不到分类...
         let images = Image {
             medium: large_img.clone(),
             large: large_img,
@@ -313,20 +283,30 @@ impl DoubanBookApi {
         self.get_book_internal(url).await
     }
 
-    fn get_text(&self, s: &str) -> String {
-        s.split(':').collect::<Vec<&str>>()[1].trim().to_string()
+    fn get_text(&self, info_text_map: &HashMap<String, String>, key: &str) -> String {
+        info_text_map.get(key).unwrap_or(&String::new()).to_string()
     }
 
-    fn get_texts(&self, array: &[&str], vec: &mut Vec<String>) {
-        for e in array {
-            if e.contains(':') {
-                break;
-            }
-            if e == &"/" {
-                continue;
-            }
-            vec.push(e.trim().to_string());
+    fn get_texts(&self, info_text_map: &HashMap<String, String>, key: &str) -> Vec<String> {
+        info_text_map
+            .get(key)
+            .unwrap_or(&String::new())
+            .split("/")
+            .filter(|&x| !x.trim().is_empty())
+            .map(|x| x.trim().to_string())
+            .collect::<Vec<String>>()
+    }
+
+    fn parse_info_text(&self, s: &str) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        // 先替换掉多作者/之间的换行符，避免下面的正则匹配少作者
+        let fix_str = self.re_remove_split_space.replace_all(s, "/").to_string();
+        // 再匹配:字符两边信息
+        for cap in self.re_info_pair.captures_iter(&fix_str) {
+            map.insert(cap[1].trim().to_string(), cap[2].trim().to_string());
         }
+
+        map
     }
 }
 
