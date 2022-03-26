@@ -115,7 +115,7 @@ impl Douban {
         let res = self
             .client
             .get(url)
-            .query(&[("q", q)])
+            .query(&[("cat", "1002"), ("q", q)])
             .send()
             .await?
             .error_for_status();
@@ -156,7 +156,7 @@ impl Douban {
                         }
                     })
                     .into_iter()
-                    .filter(|x| x.cat == "电影")
+                    .filter(|x| x.cat == "电影" || x.cat == "电视剧")
                     .take(num)
                     .collect::<Vec<Movie>>();
             }

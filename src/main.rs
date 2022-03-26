@@ -133,7 +133,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .wrap(middleware::Logger::new("%a \"%r\" %s %b %T"))
+            .wrap(middleware::Logger::default())
             .app_data(web::Data::new(douban.clone()))
             .app_data(web::Data::new(DoubanBookApi::new()))
             .app_data(web::Data::new(Opt::parse()))
