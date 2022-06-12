@@ -28,8 +28,8 @@ jobs:
         uses: snok/container-retention-policy@v1
         with:
           image-names: ${{steps.vars.outputs.APP_NAME}}
-          cut-off: A week ago UTC
-          keep-at-least: 2
+          cut-off: One month ago UTC
+          keep-at-least: 5
           skip-tags: latest
           account-type: personal
           token: ${{ secrets.PAT }}
