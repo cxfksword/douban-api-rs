@@ -1,3 +1,4 @@
+use actix_web::HttpRequest;
 use anyhow::Result;
 use lazy_static::*;
 use moka::future::{Cache, CacheBuilder};
@@ -5,7 +6,6 @@ use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use urlencoding::encode;
 use visdom::Vis;
 
 lazy_static! {
@@ -17,13 +17,12 @@ lazy_static! {
 const ORIGIN: &str = "https://movie.douban.com";
 const REFERER: &str = "https://movie.douban.com/";
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
-const DEFAULT_LIMIT: usize = 3;
 const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct Douban {
+    from_jellyfin: bool,
     client: reqwest::Client,
-    search_limit_size: usize,
     re_id: Regex,
     re_backgroud_image: Regex,
     re_sid: Regex,
@@ -41,10 +40,21 @@ pub struct Douban {
     re_imdb: Regex,
     re_site: Regex,
     re_name_math: Regex,
+    re_image_domain: Regex,
 }
 
 impl Douban {
-    pub fn new(limit_size: usize) -> Douban {
+    pub fn new(req: HttpRequest) -> Douban {
+        // 没有useragent或为空，是来自jellyfin-plugin-opendouban插件的请求
+        let from_jellyfin = !req.headers().contains_key("User-Agent")
+            || req
+                .headers()
+                .get("User-Agent")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .is_empty();
+
         let mut headers = HeaderMap::new();
         headers.insert("Origin", HeaderValue::from_static(ORIGIN));
         headers.insert("Referer", HeaderValue::from_static(REFERER));
@@ -55,11 +65,6 @@ impl Douban {
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
-        let search_limit_size = if limit_size == 0 {
-            DEFAULT_LIMIT
-        } else {
-            limit_size
-        };
 
         let re_id = Regex::new(r"/(\d+?)/").unwrap();
         let re_backgroud_image = Regex::new(r"url\((.+?)\)").unwrap();
@@ -78,9 +83,10 @@ impl Douban {
         let re_imdb = Regex::new(r"IMDb: (.+?)\n").unwrap();
         let re_site = Regex::new(r"官方网站: (.+?)\n").unwrap();
         let re_name_math = Regex::new(r"(.+第\w季|[\w\uff1a\uff01\uff0c\u00b7]+)\s*(.*)").unwrap();
+        let re_image_domain = Regex::new(r"//img\d+").unwrap();
         Self {
+            from_jellyfin,
             client,
-            search_limit_size,
             re_id,
             re_backgroud_image,
             re_sid,
@@ -98,17 +104,14 @@ impl Douban {
             re_imdb,
             re_site,
             re_name_math,
+            re_image_domain,
         }
     }
 
-    pub async fn search(&self, q: &str, count: i32, proxy: &str) -> Result<Vec<Movie>> {
-        let mut vec = Vec::with_capacity(self.search_limit_size);
+    pub async fn search(&self, q: &str, limit: i32) -> Result<Vec<Movie>> {
+        let mut vec = Vec::new();
         if q.is_empty() {
             return Ok(vec);
-        }
-        let mut num = self.search_limit_size;
-        if count > 0 {
-            num = count as usize;
         }
 
         let url = "https://www.douban.com/search";
@@ -124,7 +127,7 @@ impl Douban {
             Ok(res) => {
                 let res = res.text().await?;
                 let document = Vis::load(&res).unwrap();
-                vec = document
+                let iter = document
                     .find("div.result-list")
                     .first()
                     .find(".result")
@@ -136,10 +139,13 @@ impl Douban {
                             Some(onclick) => onclick.to_string(),
                             None => String::new(),
                         };
-                        let mut img = x.find("a.nbg>img").attr("src").unwrap().to_string();
-                        if !proxy.is_empty() {
-                            img = format!("{}?url={}", proxy, encode(&img));
-                        }
+                        let img = self.handle_image_domain(
+                            x.find("a.nbg>img")
+                                .attr("src")
+                                .unwrap()
+                                .to_string()
+                                .as_str(),
+                        );
                         let sid = self.parse_sid(&onclick);
                         let name = x.find("div.title a").text().to_string();
                         let title_mark = x.find("div.title>h3>span").text().to_string();
@@ -156,9 +162,12 @@ impl Douban {
                         }
                     })
                     .into_iter()
-                    .filter(|x| x.cat == "电影" || x.cat == "电视剧")
-                    .take(num)
-                    .collect::<Vec<Movie>>();
+                    .filter(|x| x.cat == "电影" || x.cat == "电视剧");
+                if limit > 0 {
+                    vec = iter.take(limit as usize).collect::<Vec<Movie>>();
+                } else {
+                    vec = iter.collect::<Vec<Movie>>();
+                }
             }
             Err(err) => {
                 println!("{:?}", err)
@@ -168,8 +177,8 @@ impl Douban {
         Ok(vec)
     }
 
-    pub async fn search_full(&self, q: &str, count: i32) -> Result<Vec<MovieInfo>> {
-        let movies = self.search(q, count, "").await.unwrap();
+    pub async fn search_full(&self, q: &str, limit: i32) -> Result<Vec<MovieInfo>> {
+        let movies = self.search(q, limit).await.unwrap();
         let mut list = Vec::with_capacity(movies.len());
         for i in movies.iter() {
             list.push(self.get_movie_info(&i.sid).await.unwrap())
@@ -209,7 +218,13 @@ impl Douban {
             .find("div.rating_self strong.rating_num")
             .text()
             .to_string();
-        let img = x.find("a.nbgnbg>img").attr("src").unwrap().to_string();
+        let img = self.handle_image_domain(
+            x.find("a.nbgnbg>img")
+                .attr("src")
+                .unwrap()
+                .to_string()
+                .as_str(),
+        );
 
         let intro = x.find("div.indent>span").text().trim().replace("©豆瓣", "");
         let info = x.find("#info").text().to_string();
@@ -235,7 +250,8 @@ impl Douban {
                     let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
                     let id = self.parse_id(&id_str);
                     let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
-                    let img = self.parse_backgroud_image(&img_str);
+                    let img =
+                        self.handle_image_domain(self.parse_backgroud_image(&img_str).as_str());
                     let name = x.find("div.info a.name").text().to_string();
                     let role = x.find("div.info span.role").text().to_string();
 
@@ -294,7 +310,7 @@ impl Douban {
                 let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
                 let id = self.parse_id(&id_str);
                 let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
-                let img = self.parse_backgroud_image(&img_str);
+                let img = self.handle_image_domain(self.parse_backgroud_image(&img_str).as_str());
                 let name = x
                     .find("div.info a.name")
                     .text()
@@ -339,7 +355,13 @@ impl Douban {
         let document = Vis::load(&res).unwrap();
         let x = document.find("#content");
         let id = id.to_string();
-        let img = x.find("a.nbg>img").attr("src").unwrap().to_string();
+        let img = self.handle_image_domain(
+            x.find("#headline .nbg img")
+                .attr("src")
+                .unwrap()
+                .to_string()
+                .as_str(),
+        );
         let name = x.find("h1").text().to_string();
         let mut intro = x.find("#intro span.all.hidden").text().trim().to_string();
         if intro.is_empty() {
@@ -382,9 +404,9 @@ impl Douban {
             let x = Vis::dom(x);
 
             let id = x.attr("data-id").unwrap().to_string();
-            let small = format!("https://img1.doubanio.com/view/photo/s/public/p{}.jpg", id);
-            let medium = format!("https://img1.doubanio.com/view/photo/m/public/p{}.jpg", id);
-            let large = format!("https://img1.doubanio.com/view/photo/l/public/p{}.jpg", id);
+            let small = format!("https://img2.doubanio.com/view/photo/s/public/p{}.jpg", id);
+            let medium = format!("https://img2.doubanio.com/view/photo/m/public/p{}.jpg", id);
+            let large = format!("https://img2.doubanio.com/view/photo/l/public/p{}.jpg", id);
             let size = x.find("div.prop").text().trim().to_string();
             let mut width = String::new();
             let mut height = String::new();
@@ -607,6 +629,19 @@ impl Douban {
             family,
             imdb,
         )
+    }
+
+    fn handle_image_domain(&self, url: &str) -> String {
+        if self.from_jellyfin {
+            // img2不需要受到防盗链的限制，jellyfin请求全部替换
+            self.re_image_domain.replace_all(url, "//img2").to_string()
+        } else {
+            url.to_string()
+        }
+    }
+
+    pub fn is_from_jellyfin(&self) -> bool {
+        self.from_jellyfin
     }
 }
 

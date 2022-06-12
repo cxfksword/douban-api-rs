@@ -1,4 +1,6 @@
-use actix_web::{get, middleware, web, App, HttpResponse, HttpServer, Responder, Result};
+use actix_web::{
+    get, middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result,
+};
 mod api;
 mod bookapi;
 use api::Douban;
@@ -29,51 +31,62 @@ async fn index() -> impl Responder {
 
 #[get("/movies")]
 async fn movies(
+    req: HttpRequest,
     query: web::Query<Search>,
-    douban_api: web::Data<Douban>,
     opt: web::Data<Opt>,
 ) -> Result<String> {
+    let douban_api = Douban::new(req);
+
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
 
-    let count = query.count.unwrap_or(0);
+    let mut count = query.count.unwrap_or(0);
+    if count == 0 && douban_api.is_from_jellyfin() {
+        count = opt.limit as i32
+    }
+
     if query.search_type.as_ref().unwrap_or(&String::new()) == "full" {
         let result = douban_api.search_full(&query.q, count).await.unwrap();
+        // result.iter().
         Ok(serde_json::to_string(&result).unwrap())
     } else {
-        let result = douban_api
-            .search(&query.q, count, &opt.img_proxy)
-            .await
-            .unwrap();
+        let result = douban_api.search(&query.q, count).await.unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     }
 }
 
 /// {sid} - deserializes to a String
 #[get("/movies/{sid}")]
-async fn movie(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
+async fn movie(path: web::Path<String>, req: HttpRequest) -> Result<String> {
+    let douban_api = Douban::new(req);
+
     let sid = path.into_inner();
     let result = douban_api.get_movie_info(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/movies/{sid}/celebrities")]
-async fn celebrities(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
+async fn celebrities(path: web::Path<String>, req: HttpRequest) -> Result<String> {
+    let douban_api = Douban::new(req);
+
     let sid = path.into_inner();
     let result = douban_api.get_celebrities(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/celebrities/{id}")]
-async fn celebrity(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
+async fn celebrity(path: web::Path<String>, req: HttpRequest) -> Result<String> {
+    let douban_api = Douban::new(req);
+
     let id = path.into_inner();
     let result = douban_api.get_celebrity(&id).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/photo/{sid}")]
-async fn photo(path: web::Path<String>, douban_api: web::Data<Douban>) -> Result<String> {
+async fn photo(path: web::Path<String>, req: HttpRequest) -> Result<String> {
+    let douban_api = Douban::new(req);
     let sid = path.into_inner();
     let result = douban_api.get_wallpaper(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
@@ -129,12 +142,10 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info,actix_server=info");
     env_logger::init();
     let opt = Opt::parse();
-    let douban = Douban::new(opt.limit);
 
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .app_data(web::Data::new(douban.clone()))
             .app_data(web::Data::new(DoubanBookApi::new()))
             .app_data(web::Data::new(Opt::parse()))
             .service(index)

@@ -19,7 +19,7 @@
 ## docker运行
 
 ```
-docker run -d --name=douban-api-rs --restart=unless-stopped -p 8080:80 ghcr.io/cxfksword/douban-api-rs:latest
+docker run -d --name=douban-api-rs --restart=unless-stopped -p 5000:80 ghcr.io/cxfksword/douban-api-rs:latest
 ```
 
 
