@@ -12,6 +12,9 @@ lazy_static! {
     static ref MOVIE_CACHE: Cache<String, MovieInfo> = CacheBuilder::new(CACHE_SIZE)
         .time_to_live(Duration::from_secs(10 * 60))
         .build();
+    static ref PHOTO_CACHE: Cache<String, Vec<Photo>> = CacheBuilder::new(CACHE_SIZE)
+        .time_to_live(Duration::from_secs(10 * 60))
+        .build();
 }
 
 const ORIGIN: &str = "https://movie.douban.com";
@@ -41,6 +44,7 @@ pub struct Douban {
     re_site: Regex,
     re_name_math: Regex,
     re_image_domain: Regex,
+    re_role: Regex,
 }
 
 impl Douban {
@@ -84,6 +88,7 @@ impl Douban {
         let re_site = Regex::new(r"官方网站: (.+?)\n").unwrap();
         let re_name_math = Regex::new(r"(.+第\w季|[\w\uff1a\uff01\uff0c\u00b7]+)\s*(.*)").unwrap();
         let re_image_domain = Regex::new(r"//img\d+").unwrap();
+        let re_role = Regex::new(r"\([饰|配] (.+?)\)").unwrap();
         Self {
             from_jellyfin,
             client,
@@ -105,6 +110,7 @@ impl Douban {
             re_site,
             re_name_math,
             re_image_domain,
+            re_role,
         }
     }
 
@@ -254,11 +260,13 @@ impl Douban {
                         self.handle_image_domain(self.parse_backgroud_image(&img_str).as_str());
                     let name = x.find("div.info a.name").text().to_string();
                     let role = x.find("div.info span.role").text().to_string();
+                    let role_type = String::new();
 
                     Celebrity {
                         id,
                         img,
                         name,
+                        role_type,
                         role,
                     }
                 });
@@ -318,23 +326,31 @@ impl Douban {
                     .next()
                     .unwrap_or("")
                     .to_string();
-                let role = x
+                let mut role = match self.re_role.captures(x.find("div.info span.role").text()) {
+                    Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+                    None => String::new(),
+                };
+                let role_type = x
                     .find("div.info span.role")
                     .text()
                     .split_whitespace()
                     .next()
                     .unwrap_or("")
                     .to_string();
+                if role.is_empty() {
+                    role = role_type.clone();
+                }
 
                 Celebrity {
                     id,
                     img,
                     name,
+                    role_type,
                     role,
                 }
             })
             .into_iter()
-            .filter(|x| x.role == "导演" || x.role == "配音" || x.role == "演员")
+            .filter(|x| x.role_type == "导演" || x.role_type == "配音" || x.role_type == "演员")
             .take(15)
             .collect::<Vec<Celebrity>>();
 
@@ -389,6 +405,10 @@ impl Douban {
     }
 
     pub async fn get_wallpaper(&self, sid: &str) -> Result<Vec<Photo>> {
+        let cache_key = sid.to_string();
+        if PHOTO_CACHE.get(&cache_key).is_some() {
+            return Ok(PHOTO_CACHE.get(&cache_key).unwrap());
+        }
         let url = format!("https://movie.douban.com/subject/{}/photos?type=W&start=0&sortby=size&size=a&subtype=a", sid);
         let res = self
             .client
@@ -426,6 +446,7 @@ impl Douban {
             }
         });
 
+        PHOTO_CACHE.insert(cache_key, wallpapers.clone()).await;
         Ok(wallpapers)
     }
 
@@ -693,6 +714,8 @@ pub struct Celebrity {
     id: String,
     img: String,
     name: String,
+    #[serde(skip_serializing)]
+    role_type: String,
     role: String,
 }
 
