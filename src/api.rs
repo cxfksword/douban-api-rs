@@ -363,7 +363,7 @@ impl Douban {
                 .as_str(),
         );
         let name = x.find("h1").text().to_string();
-        let mut intro = x.find("#intro span.all.hidden").text().trim().to_string();
+        let mut intro = x.find("#intro span.all").text().trim().to_string();
         if intro.is_empty() {
             intro = x.find("#intro div.bd").text().trim().to_string();
         }
@@ -584,10 +584,19 @@ impl Douban {
         };
 
         let re_birthdate = Regex::new(r"出生日期: \n(.+?)\n").unwrap();
-        let birthdate = match re_birthdate.captures(text) {
+        let mut birthdate = match re_birthdate.captures(text) {
             Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
             None => String::new(),
         };
+
+        let re_lifedate = Regex::new(r"生卒日期: \n(.+?) 至").unwrap();
+        let lifedate = match re_lifedate.captures(text) {
+            Some(x) => x.get(1).unwrap().as_str().trim().to_string(),
+            None => String::new(),
+        };
+        if birthdate.is_empty() {
+            birthdate = lifedate.clone();
+        }
 
         let re_birthplace = Regex::new(r"出生地: \n(.+?)\n").unwrap();
         let birthplace = match re_birthplace.captures(text) {
