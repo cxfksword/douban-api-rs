@@ -224,15 +224,12 @@ impl Douban {
             .find("div.rating_self strong.rating_num")
             .text()
             .to_string();
-        let img = self.get_middle_size_image(
-            self.handle_image_domain(
-                x.find("a.nbgnbg>img")
-                    .attr("src")
-                    .unwrap()
-                    .to_string()
-                    .as_str(),
-            )
-            .as_str(),
+        let img = self.handle_image_domain(
+            x.find("a.nbgnbg>img")
+                .attr("src")
+                .unwrap()
+                .to_string()
+                .as_str(),
         );
 
         let intro = x.find("div.indent>span").text().trim().replace("©豆瓣", "");
@@ -671,10 +668,6 @@ impl Douban {
         } else {
             url.to_string()
         }
-    }
-
-    fn get_middle_size_image(&self, url: &str) -> String {
-        url.replace("s_ratio_poster", "m")
     }
 
     pub fn is_from_jellyfin(&self) -> bool {
