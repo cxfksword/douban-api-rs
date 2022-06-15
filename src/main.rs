@@ -31,69 +31,86 @@ async fn index() -> impl Responder {
 
 #[get("/movies")]
 async fn movies(
+    douban_api: web::Data<Douban>,
     req: HttpRequest,
-    query: web::Query<Search>,
+    query: web::Query<SearchQuery>,
     opt: web::Data<Opt>,
 ) -> Result<String> {
-    let douban_api = Douban::new(req);
-
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
 
+    // 没有useragent或为空，是来自jellyfin-plugin-opendouban插件的请求
+    let from_jellyfin = !req.headers().contains_key("User-Agent")
+        || req
+            .headers()
+            .get("User-Agent")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .is_empty();
+
     let mut count = query.count.unwrap_or(0);
-    if count == 0 && douban_api.is_from_jellyfin() {
+    if count == 0 && from_jellyfin {
         count = opt.limit as i32
     }
 
-    if query.search_type.as_ref().unwrap_or(&String::new()) == "full" {
-        let result = douban_api.search_full(&query.q, count).await.unwrap();
-        // result.iter().
+    if query.search_type == "full" {
+        let result = douban_api
+            .search_full(&query.q, count, &query.image_size)
+            .await
+            .unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     } else {
-        let result = douban_api.search(&query.q, count).await.unwrap();
+        let result = douban_api
+            .search(&query.q, count, &query.image_size)
+            .await
+            .unwrap();
         Ok(serde_json::to_string(&result).unwrap())
     }
 }
 
 /// {sid} - deserializes to a String
 #[get("/movies/{sid}")]
-async fn movie(path: web::Path<String>, req: HttpRequest) -> Result<String> {
-    let douban_api = Douban::new(req);
-
+async fn movie(
+    douban_api: web::Data<Douban>,
+    path: web::Path<String>,
+    query: web::Query<MovieQuery>,
+) -> Result<String> {
     let sid = path.into_inner();
-    let result = douban_api.get_movie_info(&sid).await.unwrap();
+    let result = douban_api
+        .get_movie_info(&sid, &query.image_size)
+        .await
+        .unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/movies/{sid}/celebrities")]
-async fn celebrities(path: web::Path<String>, req: HttpRequest) -> Result<String> {
-    let douban_api = Douban::new(req);
-
+async fn celebrities(douban_api: web::Data<Douban>, path: web::Path<String>) -> Result<String> {
     let sid = path.into_inner();
     let result = douban_api.get_celebrities(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/celebrities/{id}")]
-async fn celebrity(path: web::Path<String>, req: HttpRequest) -> Result<String> {
-    let douban_api = Douban::new(req);
-
+async fn celebrity(douban_api: web::Data<Douban>, path: web::Path<String>) -> Result<String> {
     let id = path.into_inner();
     let result = douban_api.get_celebrity(&id).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/photo/{sid}")]
-async fn photo(path: web::Path<String>, req: HttpRequest) -> Result<String> {
-    let douban_api = Douban::new(req);
+async fn photo(douban_api: web::Data<Douban>, path: web::Path<String>) -> Result<String> {
     let sid = path.into_inner();
     let result = douban_api.get_wallpaper(&sid).await.unwrap();
     Ok(serde_json::to_string(&result).unwrap())
 }
 
 #[get("/v2/book/search")]
-async fn books(query: web::Query<Search>, book_api: web::Data<DoubanBookApi>) -> Result<String> {
+async fn books(
+    query: web::Query<SearchQuery>,
+    book_api: web::Data<DoubanBookApi>,
+) -> Result<String> {
     if query.q.is_empty() {
         return Ok("[]".to_string());
     }
@@ -129,7 +146,7 @@ async fn book_by_isbn(
 }
 
 #[get("/proxy")]
-async fn proxy(query: web::Query<Proxy>, douban_api: web::Data<Douban>) -> impl Responder {
+async fn proxy(query: web::Query<ProxyQuery>, douban_api: web::Data<Douban>) -> impl Responder {
     let resp = douban_api.proxy_img(&query.url).await.unwrap();
     let content_type = resp.headers().get("content-type").unwrap();
     HttpResponse::build(resp.status())
@@ -146,6 +163,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
+            .app_data(web::Data::new(Douban::new()))
             .app_data(web::Data::new(DoubanBookApi::new()))
             .app_data(web::Data::new(Opt::parse()))
             .service(index)
@@ -173,21 +191,27 @@ struct Opt {
     /// Listen port
     #[clap(short, long, default_value = "8080")]
     port: u16,
-    #[clap(short, long, default_value = "", env = "DOUBAN_API_IMG_PROXY")]
-    img_proxy: String,
     #[clap(short, long, default_value = "3", env = "DOUBAN_API_LIMIT_SIZE")]
     limit: usize,
 }
 
 #[derive(Deserialize)]
-struct Search {
+struct SearchQuery {
     pub q: String,
-    #[serde(alias = "type")]
-    pub search_type: Option<String>,
+    #[serde(alias = "type", default)]
+    pub search_type: String,
+    #[serde(alias = "s", default)]
+    pub image_size: String,
     pub count: Option<i32>,
 }
 
 #[derive(Deserialize)]
-struct Proxy {
+struct MovieQuery {
+    #[serde(alias = "s", default)]
+    pub image_size: String,
+}
+
+#[derive(Deserialize)]
+struct ProxyQuery {
     pub url: String,
 }

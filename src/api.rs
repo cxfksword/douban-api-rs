@@ -1,4 +1,3 @@
-use actix_web::HttpRequest;
 use anyhow::Result;
 use lazy_static::*;
 use moka::future::{Cache, CacheBuilder};
@@ -24,7 +23,6 @@ const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct Douban {
-    from_jellyfin: bool,
     client: reqwest::Client,
     re_id: Regex,
     re_backgroud_image: Regex,
@@ -48,17 +46,7 @@ pub struct Douban {
 }
 
 impl Douban {
-    pub fn new(req: HttpRequest) -> Douban {
-        // 没有useragent或为空，是来自jellyfin-plugin-opendouban插件的请求
-        let from_jellyfin = !req.headers().contains_key("User-Agent")
-            || req
-                .headers()
-                .get("User-Agent")
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .is_empty();
-
+    pub fn new() -> Douban {
         let mut headers = HeaderMap::new();
         headers.insert("Origin", HeaderValue::from_static(ORIGIN));
         headers.insert("Referer", HeaderValue::from_static(REFERER));
@@ -90,7 +78,6 @@ impl Douban {
         let re_image_domain = Regex::new(r"//img\d+").unwrap();
         let re_role = Regex::new(r"\([饰|配] (.+?)\)").unwrap();
         Self {
-            from_jellyfin,
             client,
             re_id,
             re_backgroud_image,
@@ -114,7 +101,7 @@ impl Douban {
         }
     }
 
-    pub async fn search(&self, q: &str, limit: i32) -> Result<Vec<Movie>> {
+    pub async fn search(&self, q: &str, limit: i32, image_size: &str) -> Result<Vec<Movie>> {
         let mut vec = Vec::new();
         if q.is_empty() {
             return Ok(vec);
@@ -145,12 +132,13 @@ impl Douban {
                             Some(onclick) => onclick.to_string(),
                             None => String::new(),
                         };
-                        let img = self.handle_image_domain(
+                        let img = self.get_img_by_size(
                             x.find("a.nbg>img")
                                 .attr("src")
                                 .unwrap()
                                 .to_string()
                                 .as_str(),
+                            image_size,
                         );
                         let sid = self.parse_sid(&onclick);
                         let name = x.find("div.title a").text().to_string();
@@ -183,18 +171,23 @@ impl Douban {
         Ok(vec)
     }
 
-    pub async fn search_full(&self, q: &str, limit: i32) -> Result<Vec<MovieInfo>> {
-        let movies = self.search(q, limit).await.unwrap();
+    pub async fn search_full(
+        &self,
+        q: &str,
+        limit: i32,
+        image_size: &str,
+    ) -> Result<Vec<MovieInfo>> {
+        let movies = self.search(q, limit, image_size).await.unwrap();
         let mut list = Vec::with_capacity(movies.len());
         for i in movies.iter() {
-            list.push(self.get_movie_info(&i.sid).await.unwrap())
+            list.push(self.get_movie_info(&i.sid, image_size).await.unwrap())
         }
 
         Ok(list)
     }
 
-    pub async fn get_movie_info(&self, sid: &str) -> Result<MovieInfo> {
-        let cache_key = sid.to_string();
+    pub async fn get_movie_info(&self, sid: &str, image_size: &str) -> Result<MovieInfo> {
+        let cache_key = format!("movie_{}_{}", sid, image_size);
         if MOVIE_CACHE.get(&cache_key).is_some() {
             return Ok(MOVIE_CACHE.get(&cache_key).unwrap());
         }
@@ -224,12 +217,13 @@ impl Douban {
             .find("div.rating_self strong.rating_num")
             .text()
             .to_string();
-        let img = self.handle_image_domain(
+        let img = self.get_img_by_size(
             x.find("a.nbgnbg>img")
                 .attr("src")
                 .unwrap()
                 .to_string()
                 .as_str(),
+            image_size,
         );
 
         let intro = x.find("div.indent>span").text().trim().replace("©豆瓣", "");
@@ -256,8 +250,8 @@ impl Douban {
                     let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
                     let id = self.parse_id(&id_str);
                     let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
-                    let img =
-                        self.handle_image_domain(self.parse_backgroud_image(&img_str).as_str());
+                    let img = self
+                        .get_img_by_size(self.parse_backgroud_image(&img_str).as_str(), image_size);
                     let name = x.find("div.info a.name").text().to_string();
                     let role = x.find("div.info span.role").text().to_string();
                     let role_type = String::new();
@@ -318,7 +312,7 @@ impl Douban {
                 let id_str = x.find("div.info a.name").attr("href").unwrap().to_string();
                 let id = self.parse_id(&id_str);
                 let img_str = x.find("div.avatar").attr("style").unwrap().to_string();
-                let img = self.handle_image_domain(self.parse_backgroud_image(&img_str).as_str());
+                let img = self.parse_backgroud_image(&img_str);
                 let name = x
                     .find("div.info a.name")
                     .text()
@@ -371,13 +365,11 @@ impl Douban {
         let document = Vis::load(&res).unwrap();
         let x = document.find("#content");
         let id = id.to_string();
-        let img = self.handle_image_domain(
-            x.find("#headline .nbg img")
-                .attr("src")
-                .unwrap()
-                .to_string()
-                .as_str(),
-        );
+        let img = x
+            .find("#headline .nbg img")
+            .attr("src")
+            .unwrap()
+            .to_string();
         let name = x.find("h1").text().to_string();
         let mut intro = x.find("#intro span.all").text().trim().to_string();
         if intro.is_empty() {
@@ -661,17 +653,16 @@ impl Douban {
         )
     }
 
-    fn handle_image_domain(&self, url: &str) -> String {
-        if self.from_jellyfin {
-            // img2不需要受到防盗链的限制，jellyfin请求全部替换
-            self.re_image_domain.replace_all(url, "//img2").to_string()
-        } else {
-            url.to_string()
-        }
-    }
+    fn get_img_by_size(&self, url: &str, image_size: &str) -> String {
+        // img2不需要受到防盗链的限制，图片域替换为img2
+        let mut img_url = self.re_image_domain.replace_all(url, "//img2").to_string();
 
-    pub fn is_from_jellyfin(&self) -> bool {
-        self.from_jellyfin
+        // 改变图片大小
+        if image_size == "m" || image_size == "l" {
+            img_url = img_url.replace("s_ratio_poster", image_size);
+        }
+
+        return img_url;
     }
 }
 
