@@ -126,7 +126,10 @@ impl Douban {
                     .find(".result")
                     .map(|_index, x| {
                         let x = Vis::dom(x);
-                        let rating = x.find("div.rating-info>.rating_nums").text().to_string();
+                        let mut rating = x.find("div.rating-info>.rating_nums").text().to_string();
+                        if rating.is_empty() {
+                            rating = "0".to_string();
+                        }
                         let onclick_attr = x.find("div.title a").attr("onclick");
                         let onclick = match onclick_attr {
                             Some(onclick) => onclick.to_string(),
@@ -213,10 +216,13 @@ impl Douban {
         let year_str = x.find("h1>span.year").text().to_string();
         let year = self.parse_year_for_detail(&year_str);
 
-        let rating = x
+        let mut rating = x
             .find("div.rating_self strong.rating_num")
             .text()
             .to_string();
+        if rating.is_empty() {
+            rating = "0".to_string();
+        }
         let img = self.get_img_by_size(
             x.find("a.nbgnbg>img")
                 .attr("src")
