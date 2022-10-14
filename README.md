@@ -18,6 +18,10 @@
 
 ## docker运行
 
+镜像名称：`ghcr.io/cxfksword/douban-api-rs`，需要使用这个带域名的完整名称才能pull下来。
+
+绑定端口：`5000:80`
+
 ```
 docker run -d --name=douban-api-rs --restart=unless-stopped -p 5000:80 ghcr.io/cxfksword/douban-api-rs:latest
 ```
