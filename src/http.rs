@@ -27,7 +27,7 @@ impl HttpClient {
                 let cookie_str = format!("{}; Domain=douban.com", s);
                 jar.add_cookie_str(cookie_str.as_str(), &url);
             }
-            // println!("{:#?}", jar);
+            println!("{:?}", jar);
         }
         let client = reqwest::Client::builder()
             .user_agent(UA)
