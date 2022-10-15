@@ -1,9 +1,10 @@
+use crate::http::HttpClient;
 use anyhow::Result;
 use lazy_static::*;
 use moka::future::{Cache, CacheBuilder};
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
 use visdom::Vis;
 
@@ -16,14 +17,11 @@ lazy_static! {
         .build();
 }
 
-const ORIGIN: &str = "https://movie.douban.com";
-const REFERER: &str = "https://movie.douban.com/";
-const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
 const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct Douban {
-    client: reqwest::Client,
+    client: Arc<HttpClient>,
     re_id: Regex,
     re_backgroud_image: Regex,
     re_sid: Regex,
@@ -41,23 +39,11 @@ pub struct Douban {
     re_imdb: Regex,
     re_site: Regex,
     re_name_math: Regex,
-    re_image_domain: Regex,
     re_role: Regex,
 }
 
 impl Douban {
-    pub fn new() -> Douban {
-        let mut headers = HeaderMap::new();
-        headers.insert("Origin", HeaderValue::from_static(ORIGIN));
-        headers.insert("Referer", HeaderValue::from_static(REFERER));
-        let client = reqwest::Client::builder()
-            .user_agent(UA)
-            .default_headers(headers)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .unwrap();
-
+    pub fn new(client: Arc<HttpClient>) -> Douban {
         let re_id = Regex::new(r"/(\d+?)/").unwrap();
         let re_backgroud_image = Regex::new(r"url\((.+?)\)").unwrap();
         let re_sid = Regex::new(r"sid: (\d+?),").unwrap();
@@ -75,7 +61,6 @@ impl Douban {
         let re_imdb = Regex::new(r"IMDb: (.+?)\n").unwrap();
         let re_site = Regex::new(r"官方网站: (.+?)\n").unwrap();
         let re_name_math = Regex::new(r"(.+第\w季|[\w\uff1a\uff01\uff0c\u00b7]+)\s*(.*)").unwrap();
-        let re_image_domain = Regex::new(r"//img\d+").unwrap();
         let re_role = Regex::new(r"\([饰|配] (.+?)\)").unwrap();
         Self {
             client,
@@ -96,7 +81,6 @@ impl Douban {
             re_imdb,
             re_site,
             re_name_math,
-            re_image_domain,
             re_role,
         }
     }
@@ -118,6 +102,7 @@ impl Douban {
 
         match res {
             Ok(res) => {
+                println!("Response Headers: {:#?}", res.headers());
                 let res = res.text().await?;
                 let document = Vis::load(&res).unwrap();
                 let iter = document
@@ -660,8 +645,7 @@ impl Douban {
     }
 
     fn get_img_by_size(&self, url: &str, image_size: &str) -> String {
-        // img2不需要受到防盗链的限制，图片域替换为img2
-        let mut img_url = self.re_image_domain.replace_all(url, "//img2").to_string();
+        let mut img_url = url.to_string();
 
         // 改变图片大小
         if image_size == "m" || image_size == "l" {

@@ -3,11 +3,16 @@ use actix_web::{
 };
 mod api;
 mod bookapi;
+mod config;
+mod http;
 use api::Douban;
 use bookapi::DoubanBookApi;
 use clap::Parser;
+use config::Opt;
+use http::HttpClient;
 use serde::Deserialize;
 use std::env;
+use std::sync::Arc;
 
 #[get("/")]
 async fn index() -> impl Responder {
@@ -156,15 +161,26 @@ async fn proxy(query: web::Query<ProxyQuery>, douban_api: web::Data<Douban>) -> 
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env::set_var("RUST_LOG", "actix_web=info,actix_server=info");
-    env_logger::init();
     let opt = Opt::parse();
+    if env::var("RUST_LOG").is_err() {
+        if opt.debug {
+            env::set_var(
+                "RUST_LOG",
+                "actix_web=debug,actix_server=debug,reqwest=debug",
+            );
+        } else {
+            env::set_var("RUST_LOG", "actix_web=info,actix_server=info,reqwest=warn");
+        }
+    }
+    env_logger::init();
+
+    let client = Arc::new(HttpClient::new(Opt::parse()));
 
     HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .app_data(web::Data::new(Douban::new()))
-            .app_data(web::Data::new(DoubanBookApi::new()))
+            .app_data(web::Data::new(Douban::new(Arc::clone(&client))))
+            .app_data(web::Data::new(DoubanBookApi::new(Arc::clone(&client))))
             .app_data(web::Data::new(Opt::parse()))
             .service(index)
             .service(movies)
@@ -180,19 +196,6 @@ async fn main() -> std::io::Result<()> {
     .bind((opt.host, opt.port))?
     .run()
     .await
-}
-
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Opt {
-    /// Listen host
-    #[clap(long, default_value = "0.0.0.0")]
-    host: String,
-    /// Listen port
-    #[clap(short, long, default_value = "8080")]
-    port: u16,
-    #[clap(short, long, default_value = "3", env = "DOUBAN_API_LIMIT_SIZE")]
-    limit: usize,
 }
 
 #[derive(Deserialize)]

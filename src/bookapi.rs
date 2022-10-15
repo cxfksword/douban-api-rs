@@ -1,10 +1,11 @@
+use crate::http::HttpClient;
 use anyhow::Result;
 use lazy_static::*;
 use moka::future::{Cache, CacheBuilder};
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use visdom::Vis;
 
@@ -14,31 +15,18 @@ lazy_static! {
         .build();
 }
 
-const ORIGIN: &str = "https://book.douban.com";
-const REFERER: &str = "https://book.douban.com/";
-const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36";
 const CACHE_SIZE: usize = 100;
 
 #[derive(Clone)]
 pub struct DoubanBookApi {
-    client: reqwest::Client,      //请求客户端
+    client: Arc<HttpClient>,      //请求客户端
     re_id: Regex,                 //id 正则
     re_info_pair: Regex,          //匹配:字符两边的信息
     re_remove_split_space: Regex, //去除/分隔符两边多余空格
 }
 
 impl DoubanBookApi {
-    pub fn new() -> DoubanBookApi {
-        let mut headers = HeaderMap::new();
-        headers.insert("Origin", HeaderValue::from_static(ORIGIN));
-        headers.insert("Referer", HeaderValue::from_static(REFERER));
-        let client = reqwest::Client::builder()
-            .user_agent(UA)
-            .default_headers(headers)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .unwrap();
+    pub fn new(client: Arc<HttpClient>) -> DoubanBookApi {
         let re_id = Regex::new(r"sid: (\d+?),").unwrap();
         let re_remove_split_space = Regex::new(r"\s+?/\s+").unwrap();
         let re_info_pair = Regex::new(r"([^\s]+?):\s*([^\n]+)").unwrap();
