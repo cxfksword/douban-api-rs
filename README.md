@@ -2,6 +2,23 @@
 简单的豆瓣api，主要用于配合[jellyfin-plugin-opendouban](https://github.com/caryyu/jellyfin-plugin-opendouban)插件，在jellyfin中刮削电影信息
 
 
+
+## docker运行
+
+```
+docker run -d --name=douban-api-rs --restart=unless-stopped -p 5000:80 ghcr.io/cxfksword/douban-api-rs:latest
+```
+
+镜像名称：`ghcr.io/cxfksword/douban-api-rs`，需要使用这个带域名的完整名称才能pull下来。
+
+绑定端口：`5000:80`
+
+环境变量：
+
+`DOUBAN_COOKIE`：(可选)豆瓣web登录后的cookie字符串，填写可解决搜索不到部分需登录访问的影片
+
+
+
 ## 支持的api
 
 ```
@@ -14,16 +31,6 @@
 /v2/book/search?q={book_name}&count=2   # 搜索书籍  count可不传,默认为2, 最大20,  为返回书籍信息数量
 /v2/book/isbn/{isbn}                    # 获取指定isbn的书籍
 /v2/book/id/{sid}                       # 获取指定id的书籍
-```
-
-## docker运行
-
-镜像名称：`ghcr.io/cxfksword/douban-api-rs`，需要使用这个带域名的完整名称才能pull下来。
-
-绑定端口：`5000:80`
-
-```
-docker run -d --name=douban-api-rs --restart=unless-stopped -p 5000:80 ghcr.io/cxfksword/douban-api-rs:latest
 ```
 
 
